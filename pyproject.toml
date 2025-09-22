@@ -1,0 +1,16 @@
+[project]
+name = "stock-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "akshare>=1.17.53",
+    "cachetools>=6.2.0",
+    "click>=8.3.0",
+    "matplotlib>=3.10.6",
+    "psycopg[binary]>=3.2.10",
+    "rich>=14.1.0",
+    "tenacity>=9.1.2",
+    "tushare>=1.4.24",
+]
