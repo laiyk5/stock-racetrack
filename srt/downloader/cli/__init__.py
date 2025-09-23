@@ -6,6 +6,10 @@ import click
 import srt
 from srt.downloader import config
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 @click.group()
 def cli():
     pass
@@ -87,6 +91,8 @@ def update_tushare_data(biz_key, symbols, stop_at):
         "tushare_daily": "Daily stock data from Tushare",
         "tushare_fund_daily": "Daily fund data from Tushare",
         "tushare_index_daily": "Daily index data from Tushare",
+        "tushare_moneyflow": "Money flow data",
+        "tushare_daily_basic": "Daily basic stock data from Tushare",
     }
 
     if biz_key not in available_biz_keys:
@@ -96,12 +102,16 @@ def update_tushare_data(biz_key, symbols, stop_at):
         return
 
     if symbols == "ALL":
-        if biz_key == "tushare_daily":
+        if biz_key == "tushare_daily" or biz_key == "tushare_daily_basic" or biz_key == "tushare_moneyflow":
             symbol_list = get_symbol_list("stock")
         elif biz_key == "tushare_fund_daily":
             symbol_list = get_symbol_list("fund")
         elif biz_key == "tushare_index_daily":
             symbol_list = get_symbol_list("index")
+        else:
+            logger.error(f"No symbol list available for biz_key '{biz_key}'.")
+            click.echo(f"No symbol list available for biz_key '{biz_key}'.")
+            return
     else:
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
 
@@ -109,6 +119,8 @@ def update_tushare_data(biz_key, symbols, stop_at):
         "tushare_daily": "daily",
         "tushare_fund_daily": "fund_daily",
         "tushare_index_daily": "index_daily",
+        "tushare_moneyflow": "moneyflow",
+        "tushare_daily_basic": "daily_basic",
     }
 
     api = pro_api()

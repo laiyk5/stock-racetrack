@@ -159,11 +159,14 @@ class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
                 df = fetch(symbol, start_at, chunk_stop_at)
                 logger.debug(f"Fetched {len(df) if df is not None else 0} records for {symbol} from {start_at} to {chunk_stop_at}")
                 if df is not None and not df.empty:
-                    df_list.append(df)
+                    if df.isna().all().all():
+                        logger.warning(f"All data is NA for {symbol} from {start_at} to {chunk_stop_at}, skipping.")
+                    else:
+                        df_list.append(df)
                 if chunk_stop_at >= stop_at:
                     break
                 start_at = chunk_stop_at + timedelta(1)
-            
+
             df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
 
             logger.debug("Sample of fetched data:\n%s", df.head())
