@@ -1,9 +1,17 @@
 [project]
-name = "stock-assistant"
+name = "srt"
 version = "0.1.0"
-description = "Add your description here"
+authors = [
+  { name="LAI Yikai", email="laiyk5@163.com" },
+]
+description = "A stock research tool"
 readme = "README.md"
 requires-python = ">=3.13"
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "akshare>=1.17.53",
     "cachetools>=6.2.0",
@@ -15,9 +23,23 @@ dependencies = [
     "tenacity>=9.1.2",
     "tushare>=1.4.24",
 ]
+license = "GPL-3.0-or-later"
+license-files = ["LICEN[CS]E*"]
 
 [dependency-groups]
 dev = [
     "black>=25.9.0",
     "isort>=6.0.1",
 ]
+
+[project.scripts]
+srt = "srt.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/laiyk5/stock-racetrack"
+Issues = "https://github.com/laiyk5/stock-racetrack/issues"
+
+
+[build-system]
+requires = ["uv_build >= 0.8.17, <0.9.0"]
+build-backend = "uv_build"

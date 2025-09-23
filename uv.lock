@@ -1119,9 +1119,9 @@ wheels = [
 ]
 
 [[package]]
-name = "stock-assistant"
+name = "srt"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "akshare" },
     { name = "cachetools" },
