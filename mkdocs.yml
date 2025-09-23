@@ -1,0 +1,11 @@
+site_name: My site
+site_url: https://laiyk5.github.io/stock-racetrack
+theme:
+  name: material
+plugins:
+  - blog:
+      blog_toc: true
+      archive_date_format: MMMM yyyy
+      pagination_per_page: 5
+  - tags
+  - search
