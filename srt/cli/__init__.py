@@ -1,9 +1,10 @@
 import configparser
+import logging
+
 import click
+from rich.logging import RichHandler
 
 from srt.downloader.cli import cli as downloader_cli
-import logging
-from rich.logging import RichHandler
 
 
 @click.group()
@@ -44,8 +45,9 @@ cli.add_command(downloader_cli, "download")
     required=False,
 )
 def config(section_option, value):
-    from srt import config as _config, config_dir, config_file
     import srt
+    from srt import config as _config
+    from srt import config_dir, config_file
 
     if value is None:
         if section_option:
@@ -77,7 +79,7 @@ def config(section_option, value):
             if not _config.has_option(section, option):
                 click.echo(f"Option '{option}' does not exist in section '{section}'.")
                 return
-            
+
             config_in_file = configparser.ConfigParser()
             if not config_dir.exists():
                 config_dir.mkdir(parents=True, exist_ok=True)

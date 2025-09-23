@@ -1,14 +1,15 @@
+import logging
 from datetime import datetime
 from email.policy import default
 from zoneinfo import ZoneInfo
+
 import click
 
 import srt
 from srt.downloader import config
 
-import logging
-
 logger = logging.getLogger(__name__)
+
 
 @click.group()
 def cli():
@@ -37,10 +38,8 @@ def delete_by_bizkey():
 )
 @click.option("--reset-tables", is_flag=True, help="Reset all tables in the database.")
 def reset_db_or_tables(reset_db, reset_tables):
-    from srt.downloader.dbtools import (
-        reset_database as _reset_database,
-        reset_tables as _reset_tables,
-    )
+    from srt.downloader.dbtools import reset_database as _reset_database
+    from srt.downloader.dbtools import reset_tables as _reset_tables
 
     if reset_db:
         confirm = click.confirm(
@@ -81,11 +80,12 @@ def reset_db_or_tables(reset_db, reset_tables):
     default=lambda: datetime.now().strftime("%Y-%m-%d"),
 )
 def update_tushare_data(biz_key, symbols, stop_at):
+    from tushare import pro_api
+
     from srt.downloader.updaters import (
         TushareDailyUpdaterWithSymbolAndTime,
         get_symbol_list,
     )
-    from tushare import pro_api
 
     available_biz_keys = {
         "tushare_daily": "Daily stock data from Tushare",
@@ -102,7 +102,11 @@ def update_tushare_data(biz_key, symbols, stop_at):
         return
 
     if symbols == "ALL":
-        if biz_key == "tushare_daily" or biz_key == "tushare_daily_basic" or biz_key == "tushare_moneyflow":
+        if (
+            biz_key == "tushare_daily"
+            or biz_key == "tushare_daily_basic"
+            or biz_key == "tushare_moneyflow"
+        ):
             symbol_list = get_symbol_list("stock")
         elif biz_key == "tushare_fund_daily":
             symbol_list = get_symbol_list("fund")
@@ -143,8 +147,10 @@ def update_tushare_data(biz_key, symbols, stop_at):
     required=False,
 )
 def config_(section_option, value):
-    from srt.downloader import config as _config, config_dir, config_file
     import configparser
+
+    from srt.downloader import config as _config
+    from srt.downloader import config_dir, config_file
 
     if value is None:
         if section_option:

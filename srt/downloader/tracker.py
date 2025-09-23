@@ -1,11 +1,20 @@
 from typing import Callable, Iterable, List, Optional, TypeVar
 
 from rich.console import Console
-from rich.progress import (BarColumn, Progress, ProgressColumn,
-                           TaskProgressColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn)
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    ProgressColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from rich.style import StyleType
 
 ProgressType = TypeVar("ProgressType")
+
+
 def track(
     sequence: Iterable[ProgressType],
     description: str = "Working...",

@@ -1,9 +1,8 @@
 # Utility to check which (biz_key, symbol, timestamp) pairs are missing from raw_data
-from typing import List, Tuple, Any
-
-from typing import Optional
-import psycopg
 import logging
+from typing import Any, List, Optional, Tuple
+
+import psycopg
 from rich.logging import RichHandler
 
 from . import config
@@ -35,9 +34,7 @@ def reset_tables():
     url = get_conn_str(DB_NAME)
     with psycopg.connect(url) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "DROP TABLE IF EXISTS raw_data;"
-            )
+            cur.execute("DROP TABLE IF EXISTS raw_data;")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS raw_data (
@@ -70,7 +67,7 @@ def reset_database():
 
 
 def delete_rawdata_by_bizkey(biz_key: str):
-    
+
     url = get_conn_str(DB_NAME)
     with psycopg.connect(url) as conn:
         with conn.cursor() as cur:
@@ -121,8 +118,8 @@ if __name__ == "__main__":
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
+                SELECT column_name, data_type
+                FROM information_schema.columns
                 WHERE table_name = 'raw_data';
             """
             )

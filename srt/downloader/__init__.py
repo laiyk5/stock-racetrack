@@ -1,6 +1,6 @@
 import configparser
-from copy import deepcopy
 import logging
+from copy import deepcopy
 
 import srt
 
@@ -10,7 +10,7 @@ parent_config = srt.config
 
 default_config = {
     "tushare": {
-        "token": '',
+        "token": "",
     },
 }
 

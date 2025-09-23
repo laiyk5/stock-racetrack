@@ -1,23 +1,23 @@
+import json
+import logging
 from abc import abstractmethod
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
 import pandas as pd
+import psycopg
 import tenacity
 
 from srt.downloader.tracker import track
 
 from .dbtools import DB_NAME, get_conn_str
-import psycopg
-
-import logging
-import json
 
 logger = logging.getLogger(__name__)
 
 from tushare import pro_api, set_token
 
 api = pro_api()
+
 
 class DailyUpdaterWithSymbolAndTime:
     """
@@ -78,10 +78,10 @@ class DailyUpdaterWithSymbolAndTime:
 from tushare import pro_api, set_token
 
 from . import config
-
 from .dbtools import store_data
 
 set_token(config.get("tushare", "token"))
+
 
 class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
     def __init__(self, biz_key, api_method: Callable):
@@ -115,9 +115,9 @@ class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
             df = self.api_method(trade_date=date_str)
             return df
 
-        for date in track([
-            start_at + timedelta(n) for n in range((stop_at - start_at).days + 1)
-        ]):
+        for date in track(
+            [start_at + timedelta(n) for n in range((stop_at - start_at).days + 1)]
+        ):
             df = fetch(date)
             if df is not None and not df.empty:
                 # filter out all symbols not in the list
@@ -144,7 +144,7 @@ class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
                 end_date=stop_at.strftime("%Y%m%d"),
             )
             return df
-        
+
         MAX_DATE_RANGE_DAYS = 5000
 
         for symbol in track(symbols):
@@ -157,10 +157,14 @@ class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
                 else:
                     chunk_stop_at = stop_at
                 df = fetch(symbol, start_at, chunk_stop_at)
-                logger.debug(f"Fetched {len(df) if df is not None else 0} records for {symbol} from {start_at} to {chunk_stop_at}")
+                logger.debug(
+                    f"Fetched {len(df) if df is not None else 0} records for {symbol} from {start_at} to {chunk_stop_at}"
+                )
                 if df is not None and not df.empty:
                     if df.isna().all().all():
-                        logger.warning(f"All data is NA for {symbol} from {start_at} to {chunk_stop_at}, skipping.")
+                        logger.warning(
+                            f"All data is NA for {symbol} from {start_at} to {chunk_stop_at}, skipping."
+                        )
                     else:
                         df_list.append(df)
                 if chunk_stop_at >= stop_at:
@@ -185,7 +189,7 @@ class TushareDailyUpdaterWithSymbolAndTime(DailyUpdaterWithSymbolAndTime):
     stop=tenacity.stop_after_attempt(5),
     before=tenacity.before_log(logger, logging.DEBUG),
 )
-def get_symbol_list(symbol_type:str) -> list:
+def get_symbol_list(symbol_type: str) -> list:
     """
     Fetch the stock list from Tushare and return a list of stock symbols.
     """
@@ -197,7 +201,9 @@ def get_symbol_list(symbol_type:str) -> list:
     }
 
     if symbol_type not in available_symbol_types:
-        raise ValueError(f"Invalid symbol_type. Available options are: {', '.join(available_symbol_types)}")
+        raise ValueError(
+            f"Invalid symbol_type. Available options are: {', '.join(available_symbol_types)}"
+        )
 
     logger.debug("Fetching stock list from Tushare...")
     df = api.query(
@@ -210,9 +216,11 @@ def get_symbol_list(symbol_type:str) -> list:
     logger.debug("Sample stock list data:\n%s", df.head())
     return df["ts_code"].tolist()
 
+
 if __name__ == "__main__":
-    from . import logger
     from rich.logging import RichHandler
+
+    from . import logger
 
     logger.addHandler(RichHandler(level=logging.DEBUG))
     logger.setLevel(logging.DEBUG)
@@ -221,7 +229,9 @@ if __name__ == "__main__":
     api = pro_api()
 
     stock_list = get_symbol_list("stock")
-    TushareDailyUpdaterWithSymbolAndTime(biz_key="tushare_daily", api_method=api.daily).download(
+    TushareDailyUpdaterWithSymbolAndTime(
+        biz_key="tushare_daily", api_method=api.daily
+    ).download(
         symbols=stock_list,
         stop_at=datetime.strptime("20240101", "%Y%m%d"),
     )

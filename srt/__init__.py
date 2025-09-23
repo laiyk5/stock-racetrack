@@ -12,7 +12,7 @@ default_configurations = {
         "host": "localhost",
         "port": "5432",
         "user": "postgres",
-        "password": "password"
+        "password": "password",
     },
     "app": {
         "debug": "false",

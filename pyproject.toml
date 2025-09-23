@@ -9,8 +9,15 @@ dependencies = [
     "cachetools>=6.2.0",
     "click>=8.3.0",
     "matplotlib>=3.10.6",
+    "pre-commit>=4.3.0",
     "psycopg[binary]>=3.2.10",
     "rich>=14.1.0",
     "tenacity>=9.1.2",
     "tushare>=1.4.24",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.9.0",
+    "isort>=6.0.1",
 ]
