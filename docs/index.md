@@ -1,17 +1,5 @@
-# Welcome to MkDocs
+# Stock RaceTrack
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+My stock research toolset.
 
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+The project is under active development. See [Blogs](/stock-racetrack//blog) if you're interested in the development progress.
