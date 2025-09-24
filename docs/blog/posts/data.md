@@ -8,6 +8,8 @@ draft: true
 ---
 # Data Processing Module Design
 
+<!-- more -->
+
 ## What's important to a stock research system
 
 1. timeliness. the timeliness of data is invaluable.

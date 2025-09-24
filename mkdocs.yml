@@ -9,3 +9,6 @@ plugins:
       pagination_per_page: 5
   - tags
   - search
+  - social
+extra_css:
+  - stylesheets/extra.css

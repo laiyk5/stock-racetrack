@@ -8,8 +8,6 @@ categories:
 
 # Difficulties of Implementing a Data Downloader
 
-## 1. The value of a data downloader
-
 HTTP based APIs (like Tushare and AKshare) are very convenient, but when it comes to stock research, backtesting or auto-trading, they have some fatal drawbacks:
 
 1. Network delay: the network delay would accumulate to an unacceptable level when the computation involves many queries.
@@ -17,7 +15,9 @@ HTTP based APIs (like Tushare and AKshare) are very convenient, but when it come
 
 To overcome these difficulties, one solution is to "cached" them in your private database.
 
-## 2. Nature of Web-based API
+<!-- more -->
+
+## Nature of Web-based API
 
 The nature of all APIs are:
 
@@ -29,7 +29,7 @@ The nature of all APIs are:
 - To overcome 2, the solution would be batch and cache.
 - To overcome 3, we use batch with limited size.
 
-## 3. Nature of Stock Data API
+## Nature of Stock Data API
 
 Most Stock data APIs can be categorized as:
 
@@ -57,7 +57,7 @@ class API:
 }
 ```
 
-## 4. Variety of data schema
+## Variety of data schema
 
 For stock data, there're so many data endpoints with so many different schemas. It's not realistic to replicate such amount of APIs.
 But we can directly store each data record as a json object to decouple the fetching and preprocessing stage.
@@ -80,7 +80,7 @@ record = (biz_key, symbol, timerange, data)
 
 With this schema, we can adapt to many different API of many different data providers easily.
 
-## 5. API abuse: Meaning less request
+## API abuse: Meaning less request
 
 The data request is usually like this:
 
@@ -94,7 +94,7 @@ fetching all data specified by the request would be wasteful.
 What's more, the underlying API might be frequency limited or returning record limited,
 which further complicates the problem.
 
-### 5.1 Solution 1: brute force
+### Solution 1: brute force
 
 We assume that the data provider can provide both fetch-by-time and fetch-by-symbol methods,
 the size of the whole dataset is acceptable for both storage and time to fetch. Then we just need
@@ -104,7 +104,7 @@ to:
 2. and just fetch full history of those missing symbols till the last update time
 3. and finally fetch all data from last update time to now by time.
 
-### 5.2 Solution 2: fine grianed control
+### Solution 2: fine grianed control
 
 Remember our purpose: we want to avoid abusing the API. So the target is not
 to avoid all meaningless request, but try to cut as more meaningless request as possible.
@@ -112,7 +112,7 @@ to avoid all meaningless request, but try to cut as more meaningless request as 
 To avoid abusing the API, the solution is merging the underlying data request.
 But before we can merge the data requests, we have to find them out first.
 
-#### 5.2.1 Tracking the missing data
+#### Tracking the missing data
 
 One solution is, for each `(biz_key, symbol)`, maintaining a table `raw_data_coverage` recording the
 data fetched during `timerange`. Every time we bulk write the `raw_data` table, we also bulk request
@@ -121,11 +121,9 @@ the indexes of missing records, where `S` is the size of the symbol set given.
 
 There're some corner stage. Some data is missing because of its nature: the market is close on that day, the
 company is unlisted, not listed, suspended and so on. So the calculated set is a superset of the
-missing data.
+missing data. The analyze and solution can be found [below](#known-missing-data)
 
-1. If no data
-
-#### 5.2.2 The merging direction
+#### The merging direction
 
 Different API suits different merging direction. If the API is a crawler that craw detail page of a specific
 symbol, then we should merge in the time direction; if the API can provide a fetch several symbols in batch,
@@ -138,7 +136,7 @@ So the computing costs is much lower then the `O(TS)` fetching costs.
 One corner case is that the missing data is distributed evenly. This would trigger a fetch of all existing data.
 But since the request is both symbol locally and time locally, this case would be rare.
 
-#### 5.2.3 Known missing data
+#### Known missing data
 
 Some data does not exists in the certain time range. If we ignore this nature of the stock data, we will end up
 with a fragmented `raw_data_coverage` table. Until now, the semantic of the coverage table is: the time range the

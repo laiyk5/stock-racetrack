@@ -30,7 +30,7 @@ license-files = ["LICEN[CS]E*"]
 dev = [
     "black>=25.9.0",
     "isort>=6.0.1",
-    "mkdocs-material>=9.6.16",
+    "mkdocs-material[imaging]>=9.6.16",
     "snakeviz>=2.2.2",
 ]
 
