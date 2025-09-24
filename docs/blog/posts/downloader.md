@@ -1,7 +1,7 @@
 ---
 date:
   created: 2025-09-23
-  created: 2025-09-24
+  updated: 2025-09-24
 categories:
   - Data
 ---
@@ -123,6 +123,8 @@ There're some corner stage. Some data is missing because of its nature: the mark
 company is unlisted, not listed, suspended and so on. So the calculated set is a superset of the
 missing data.
 
+1. If no data
+
 #### 5.2.2 The merging direction
 
 Different API suits different merging direction. If the API is a crawler that craw detail page of a specific
@@ -135,3 +137,15 @@ So the computing costs is much lower then the `O(TS)` fetching costs.
 
 One corner case is that the missing data is distributed evenly. This would trigger a fetch of all existing data.
 But since the request is both symbol locally and time locally, this case would be rare.
+
+#### 5.2.3 Known missing data
+
+Some data does not exists in the certain time range. If we ignore this nature of the stock data, we will end up
+with a fragmented `raw_data_coverage` table. Until now, the semantic of the coverage table is: the time range the
+data covered. But to avoid fragmentation, and to make the table better serve the purpose of avoid duplicate API calls, let us shift the semantic to "the time range that do not fetch again".
+
+But how/when to declare these time ranges? There're two approaches, a strict approach and a lapse approach. If
+we take the strict approach, we need a trustful source that tell us that which ranges are not covered. If we take the lapse approach, we just simply black out all those we have tried, and those return an empty data.
+
+The later one is more pratical: if no data is returned, just assume the data does not exists. Data in the past
+logically will not be updated in the future. So missing data is always missing.

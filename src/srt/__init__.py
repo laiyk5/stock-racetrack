@@ -32,3 +32,5 @@ config_file = config_dir / "config.ini"
 if config_file.exists():
     config.read(config_file)
     logger.info(f"Loaded configuration from {config_file}")
+
+logger.setLevel(config.get("app", "log_level", fallback="INFO"))

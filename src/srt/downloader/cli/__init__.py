@@ -7,6 +7,7 @@ import click
 
 import srt
 from srt.downloader import config
+from srt.downloader.downloader import TushareAPI
 
 logger = logging.getLogger(__name__)
 
@@ -74,25 +75,27 @@ def reset_db_or_tables(reset_db, reset_tables):
     default="ALL",
 )
 @click.option(
-    "--stop-at",
-    prompt="Stop At (YYYY-MM-DD)",
-    help="The end date for the data update in YYYY-MM-DD format.",
-    default=lambda: datetime.now().strftime("%Y-%m-%d"),
+    "--start-at",
+    prompt="Start At (YYYY-MM-DD:hh:mm:ss)",
+    help="The start timestamp for the data update in YYYY-MM-DD:hh:mm:ss format.",
+    default=lambda: datetime(1980, 1, 1).strftime("%Y-%m-%d:%H:%M:%S"),
 )
-def update_tushare_data(biz_key, symbols, stop_at):
+@click.option(
+    "--stop-at",
+    prompt="Stop At (YYYY-MM-DD:hh:mm:ss)",
+    help="The end timestamp for the data update in YYYY-MM-DD:hh:mm:ss format.",
+    default=lambda: datetime.now().strftime("%Y-%m-%d:%H:%M:%S"),
+)
+def download(biz_key, symbols, start_at, stop_at):
     from tushare import pro_api
 
-    from srt.downloader.updaters import (
-        TushareDailyUpdaterWithSymbolAndTime,
+    from srt.downloader.downloader import TushareAPI, download
+    from srt.downloader.utils import (
         get_symbol_list,
     )
 
     available_biz_keys = {
         "tushare_daily": "Daily stock data from Tushare",
-        "tushare_fund_daily": "Daily fund data from Tushare",
-        "tushare_index_daily": "Daily index data from Tushare",
-        "tushare_moneyflow": "Money flow data",
-        "tushare_daily_basic": "Daily basic stock data from Tushare",
     }
 
     if biz_key not in available_biz_keys:
@@ -102,16 +105,8 @@ def update_tushare_data(biz_key, symbols, stop_at):
         return
 
     if symbols == "ALL":
-        if (
-            biz_key == "tushare_daily"
-            or biz_key == "tushare_daily_basic"
-            or biz_key == "tushare_moneyflow"
-        ):
+        if biz_key == "tushare_daily":
             symbol_list = get_symbol_list("stock")
-        elif biz_key == "tushare_fund_daily":
-            symbol_list = get_symbol_list("fund")
-        elif biz_key == "tushare_index_daily":
-            symbol_list = get_symbol_list("index")
         else:
             logger.error(f"No symbol list available for biz_key '{biz_key}'.")
             click.echo(f"No symbol list available for biz_key '{biz_key}'.")
@@ -119,23 +114,22 @@ def update_tushare_data(biz_key, symbols, stop_at):
     else:
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
 
-    api_methods = {
-        "tushare_daily": "daily",
-        "tushare_fund_daily": "fund_daily",
-        "tushare_index_daily": "index_daily",
-        "tushare_moneyflow": "moneyflow",
-        "tushare_daily_basic": "daily_basic",
-    }
-
     api = pro_api()
 
-    def api_method(*args, **kwargs):
-        return api.query(api_methods[biz_key], *args, **kwargs)
+    api_methods = {
+        "tushare_daily": api.daily,
+    }
 
-    updater = TushareDailyUpdaterWithSymbolAndTime(biz_key, api_method)
-    stop_at_date = datetime.strptime(stop_at, "%Y-%m-%d")
-    stop_at_date = stop_at_date.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
-    updater.download(symbol_list, stop_at_date)
+    def api_method(*args, **kwargs):
+        return api_methods[biz_key](*args, **kwargs)
+
+    api = TushareAPI(api_method=api_method, biz_key=biz_key)
+
+    start_at = datetime.strptime(start_at, "%Y-%m-%d:%H:%M:%S")
+    start_at = start_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
+    stop_at = datetime.strptime(stop_at, "%Y-%m-%d:%H:%M:%S")
+    stop_at = stop_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
+    download(api, symbol_list, start_at, stop_at)
     click.echo(f"Data update for biz_key '{biz_key}' completed up to {stop_at}.")
 
 
