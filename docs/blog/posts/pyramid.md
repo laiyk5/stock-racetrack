@@ -1,10 +1,9 @@
 ---
 date:
   created: 2025-09-28
-  updated: 2025-09-28
+  updated: 2025-09-30
 categories:
   - Research
-draft: true
 ---
 
 # Pyramid Strategy
