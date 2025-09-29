@@ -35,6 +35,12 @@
                 "reset-db-or-tables",
                 "--reset-db"
             ],
+        },
+        {
+            "name": "Run Pyramid Strategy",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "srt.research.pyramid.main",
         }
     ]
 }

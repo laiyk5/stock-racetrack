@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 default_configurations = {
     "database": {
         "host": "localhost",
-        "port": "5432",
+        "port": "5433",
         "user": "postgres",
         "password": "password",
     },

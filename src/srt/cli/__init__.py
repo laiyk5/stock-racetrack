@@ -5,6 +5,7 @@ import click
 from rich.logging import RichHandler
 
 from srt.datasource.cli import cli as ds_cli
+from srt.strategy.cli import cli as research_cli
 
 
 @click.group()
@@ -35,6 +36,7 @@ def cli(debug):
 
 
 cli.add_command(ds_cli, "ds")
+cli.add_command(research_cli, "research")
 
 
 # Get or Set configuration
