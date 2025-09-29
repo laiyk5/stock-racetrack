@@ -7,7 +7,7 @@ My stock research toolset.
 
 ## Usage
 
-### srt.downloader
+### srt.datasource
 
 > [!NOTE]
 > Make sure you have configured your API keys and environment variables before running the downloader. Refer to the [Configuration](#configuration) section for setup instructions.
@@ -18,7 +18,7 @@ The downloader cli provide a default method that fetches all stock's data. If yo
 
 
 ```bash
-srt download download --biz-key tushare_daily --symbol
+srt ds download --biz-key tushare_daily --symbol
 s ALL --start-at 2025-01-01:00:00:00 --stop-at 2026-
 01-01:00:00:00
 ```

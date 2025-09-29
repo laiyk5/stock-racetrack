@@ -1,13 +1,14 @@
 import logging
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import tenacity
 from tushare import pro_api, set_token
 
-from srt.downloader.dbtools import get_missing_queries, store_data
-from srt.downloader.tracker import track
+from srt.datasource.dbtools import get_missing_queries, store_data
+from srt.datasource.tracker import track
+from srt.datasource.utils import get_symbol_list
 
 from . import config
 
@@ -257,7 +258,7 @@ def merge_timeranges(
     return merged_queries
 
 
-def download(api: API, symbols: list[str], start_at: datetime, stop_at: datetime):
+def _download(api: API, symbols: list[str], start_at: datetime, stop_at: datetime):
     stop_at = min(datetime.now(tz=stop_at.tzinfo), stop_at)
     start_at = max(start_at, datetime(1989, 1, 1, tzinfo=start_at.tzinfo))
     if start_at >= stop_at:
@@ -296,3 +297,60 @@ def download(api: API, symbols: list[str], start_at: datetime, stop_at: datetime
                 raise ValueError("No symbols to download")
         else:
             raise ValueError(f"Unknown preference: {api.preference}")
+
+
+api = pro_api()
+TUSHARE_AVAILABLE_DATASETS = {
+    "daily": {
+        "method": api.daily,
+        "symbol_type": "stock",
+    },
+    "daily_basic": {
+        "method": api.daily_basic,
+        "symbol_type": "stock",
+    },
+    "moneyflow": {
+        "method": api.moneyflow,
+        "symbol_type": "stock",
+    },
+}
+
+
+def tushare_download(
+    biz_key: str, symbols: list[str], start_at: datetime, stop_at: datetime
+):
+    _, dataset = biz_key.split("_", 1)
+
+    if dataset not in TUSHARE_AVAILABLE_DATASETS:
+        raise ValueError(f"Unknown dataset: {dataset}")
+    dataset_info = TUSHARE_AVAILABLE_DATASETS[dataset]
+    api_method = dataset_info["method"]
+    api = TushareAPI(
+        api_method=api_method,
+        biz_key=biz_key,
+        limit_qps=10,
+        limit_rpq=6000,
+        preference="hybrid",
+        frequency=timedelta(days=1),
+    )
+    if symbols == []:
+        symbols = get_symbol_list(dataset_info["symbol_type"])
+
+    _download(api, symbols, start_at, stop_at)
+
+
+AVAILABLE_PROVIDER = {"tushare": tushare_download}
+
+
+def download(biz_key: str, symbols: list[str], start_at: datetime, stop_at: datetime):
+    import re
+
+    re.match(r"^[a-zA-Z0-9_]+_[a-zA-Z0-9_]+$", biz_key) or ValueError("Invalid biz_key")
+
+    provider, dataset = biz_key.split("_", 1)
+
+    if provider not in AVAILABLE_PROVIDER:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    handler = AVAILABLE_PROVIDER[provider]
+    handler(biz_key, symbols, start_at, stop_at)

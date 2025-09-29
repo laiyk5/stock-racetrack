@@ -4,7 +4,7 @@ import logging
 import click
 from rich.logging import RichHandler
 
-from srt.downloader.cli import cli as downloader_cli
+from srt.datasource.cli import cli as ds_cli
 
 
 @click.group()
@@ -34,7 +34,7 @@ def cli(debug):
         logging.getLogger("rich").setLevel(logging.ERROR)
 
 
-cli.add_command(downloader_cli, "download")
+cli.add_command(ds_cli, "ds")
 
 
 # Get or Set configuration

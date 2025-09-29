@@ -1,13 +1,10 @@
 import logging
-from datetime import datetime
-from email.policy import default
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import click
 
-import srt
-from srt.downloader import config
-from srt.downloader.downloader import TushareAPI
+from srt.datasource import config
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +16,7 @@ def cli():
 
 @cli.command()
 def delete_by_bizkey():
-    from srt.downloader.dbtools import delete_rawdata_by_bizkey
+    from srt.datasource.dbtools import delete_rawdata_by_bizkey
 
     biz_key = click.prompt("Please enter the biz_key to delete", type=str)
     confirm = click.confirm(
@@ -39,8 +36,8 @@ def delete_by_bizkey():
 )
 @click.option("--reset-tables", is_flag=True, help="Reset all tables in the database.")
 def reset_db_or_tables(reset_db, reset_tables):
-    from srt.downloader.dbtools import reset_database as _reset_database
-    from srt.downloader.dbtools import reset_tables as _reset_tables
+    from srt.datasource.dbtools import reset_database as _reset_database
+    from srt.datasource.dbtools import reset_tables as _reset_tables
 
     if reset_db:
         confirm = click.confirm(
@@ -70,9 +67,9 @@ def reset_db_or_tables(reset_db, reset_tables):
 @click.option("--biz-key", prompt="Business Key", help="The business key for the data.")
 @click.option(
     "--symbols",
-    prompt="Symbols (comma-separated), [ALL] for all symbols",
+    prompt="Symbols (comma-separated), left empty for all symbols",
     help="Comma-separated list of symbols to update.",
-    default="ALL",
+    default="",
 )
 @click.option(
     "--start-at",
@@ -87,50 +84,20 @@ def reset_db_or_tables(reset_db, reset_tables):
     default=lambda: datetime.now().strftime("%Y-%m-%d:%H:%M:%S"),
 )
 def download(biz_key, symbols, start_at, stop_at):
-    from tushare import pro_api
+    from srt.datasource.downloader import download
 
-    from srt.downloader.downloader import TushareAPI, download
-    from srt.downloader.utils import (
-        get_symbol_list,
-    )
+    start_at = set_timezone(start_at)
+    stop_at = set_timezone(stop_at)
 
-    available_biz_keys = {
-        "tushare_daily": "Daily stock data from Tushare",
-    }
+    symbols = [s.strip() for s in symbols.split(",")] if symbols else []
 
-    if biz_key not in available_biz_keys:
-        click.echo(
-            f"Invalid biz_key. Available options are: {', '.join(available_biz_keys.keys())}"
-        )
-        return
-
-    if symbols == "ALL":
-        if biz_key == "tushare_daily":
-            symbol_list = get_symbol_list("stock")
-        else:
-            logger.error(f"No symbol list available for biz_key '{biz_key}'.")
-            click.echo(f"No symbol list available for biz_key '{biz_key}'.")
-            return
-    else:
-        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-
-    api = pro_api()
-
-    api_methods = {
-        "tushare_daily": api.daily,
-    }
-
-    def api_method(*args, **kwargs):
-        return api_methods[biz_key](*args, **kwargs)
-
-    api = TushareAPI(api_method=api_method, biz_key=biz_key)
-
-    start_at = datetime.strptime(start_at, "%Y-%m-%d:%H:%M:%S")
-    start_at = start_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
-    stop_at = datetime.strptime(stop_at, "%Y-%m-%d:%H:%M:%S")
-    stop_at = stop_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
-    download(api, symbol_list, start_at, stop_at)
+    download(biz_key, symbols, start_at, stop_at)
     click.echo(f"Data update for biz_key '{biz_key}' completed up to {stop_at}.")
+
+
+def set_timezone(start_at):
+    start_at = start_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
+    return start_at
 
 
 # Get or Set configuration
@@ -143,8 +110,8 @@ def download(biz_key, symbols, start_at, stop_at):
 def config_(section_option, value):
     import configparser
 
-    from srt.downloader import config as _config
-    from srt.downloader import config_dir, config_file
+    from srt.datasource import config as _config
+    from srt.datasource import config_dir, config_file
 
     if value is None:
         if section_option:
@@ -193,3 +160,50 @@ def config_(section_option, value):
             click.echo(
                 "Please specify the configuration option to set in 'section.option' format."
             )
+
+
+@cli.command()
+@click.option(
+    "--provider", required=True, type=click.Choice(["tushare"]), help="Data provider"
+)
+@click.option("--dataset", required=True, type=str, help="")
+@click.option("--symbol", required=True, type=str, help="Stock symbol, e.g., 601088.SH")
+@click.option(
+    "--start-at",
+    required=True,
+    type=click.DateTime(formats=["%Y-%m-%d:%H:%M:%S"]),
+    help="Start date in YYYY-MM-DD format",
+    default=(datetime.now() - timedelta(days=30)).strftime(
+        "%Y-%m-%d:%H:%M:%S"
+    ),  # default to last 30 days
+)
+@click.option(
+    "--end-at",
+    required=True,
+    type=click.DateTime(formats=["%Y-%m-%d:%H:%M:%S"]),
+    help="End date in YYYY-MM-DD format",
+    default=datetime.now().strftime("%Y-%m-%d:%H:%M:%S"),
+)
+def show(provider, dataset, symbol, start_at, end_at):
+    from srt.datasource.datasource import TushareDatasource
+
+    start_at = set_timezone(start_at)
+    end_at = set_timezone(end_at)
+
+    ds_map = {
+        "tushare": {
+            "stock_price_ohlcv_daily": TushareDatasource.get_stock_price_ohlcv_daily
+        },
+    }
+
+    click.echo(
+        f"Fetching data from provider '{provider}', dataset '{dataset}' for symbol '{symbol}' from {start_at} to {end_at}"
+    )
+    provider_info = ds_map.get(provider)
+    if dataset not in provider_info:
+        click.echo(f"Dataset '{dataset}' not supported for provider '{provider}'")
+        return
+
+    data = provider_info[dataset](symbol, start_at, end_at)
+    click.echo(data)
+    click.echo("Data fetch completed.")

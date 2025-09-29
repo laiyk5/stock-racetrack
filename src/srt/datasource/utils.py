@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import tenacity
 from tushare import pro_api, set_token
 
-from srt.downloader import config
+from srt.datasource import config
 
 logger = logging.getLogger(__name__)
 
