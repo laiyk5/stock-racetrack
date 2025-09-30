@@ -201,7 +201,9 @@ def show(provider, dataset, symbol, start_at, end_at):
 
     ds_map = {
         "tushare": {
-            "stock_price_ohlcv_daily": TushareDatasource.get_stock_price_ohlcv_daily
+            "stock_price_ohlcv_daily": TushareDatasource.get_stock_price_ohlcv_daily,
+            "stock_moneyflow": TushareDatasource.get_stock_moneyflow,
+            "stock_basic_daily": TushareDatasource.get_stock_basic_daily,
         },
     }
 
@@ -217,5 +219,5 @@ def show(provider, dataset, symbol, start_at, end_at):
 
     data = provider_info[dataset](symbol, start_at, end_at)
 
-    console.print(data, justify="center")
+    console.print(data)
     console.print("Data fetch completed.")

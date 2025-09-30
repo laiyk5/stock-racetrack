@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from functools import cache
 from typing import Any, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import psycopg
 from rich.logging import RichHandler
@@ -359,7 +360,10 @@ def store_data(
             if rows:
                 # merge all these ranges with the new range
                 merged_start = query.start_at
-                merged_end = min(query.stop_at, datetime.now() - delay)
+                merged_end = min(
+                    query.stop_at,
+                    datetime.now(tz=query.stop_at.tzinfo) - delay,
+                )
                 for row in rows:
                     existing_range = row[0]
                     existing_start = existing_range.lower
