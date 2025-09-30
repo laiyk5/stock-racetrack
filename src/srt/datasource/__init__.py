@@ -12,6 +12,9 @@ default_config = {
     "tushare": {
         "token": "",
     },
+    "database": {
+        "dbname": "srt_ds",
+    },
 }
 
 config = configparser.ConfigParser()
