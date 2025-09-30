@@ -1,6 +1,6 @@
 # Utility to check which (biz_key, symbol, timestamp) pairs are missing from raw_data
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cache
 from typing import Any, List, Optional, Tuple
 
@@ -295,6 +295,7 @@ if __name__ == "__main__":
 def store_data(
     query: Query,
     transformed_data: list[RawDataRecord],
+    delay: timedelta = timedelta(days=1),
 ) -> int:
     """Store the transformed data into the PostgreSQL database.
 
@@ -358,7 +359,7 @@ def store_data(
             if rows:
                 # merge all these ranges with the new range
                 merged_start = query.start_at
-                merged_end = query.stop_at
+                merged_end = min(query.stop_at, datetime.now() - delay)
                 for row in rows:
                     existing_range = row[0]
                     existing_start = existing_range.lower

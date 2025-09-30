@@ -22,6 +22,7 @@ class API:
     preference: str = "symbol"  # or "time", or "hybrid"
     frequency: timedelta = timedelta(days=1)
     dataset: Dataset
+    delay: timedelta = max(frequency, timedelta(seconds=3600))
 
     @abstractmethod
     def download_on_symbol(
@@ -112,7 +113,9 @@ class TushareAPI(API):
         df = self.api_method(
             ts_code=symbol,
             start_date=start_at.strftime("%Y%m%d"),
-            end_date=stop_at.strftime("%Y%m%d"),
+            end_date=stop_at.strftime(
+                "%Y%m%d"
+            ),  # tushare API is inclusive of end_date, so there's no need to ceiling stop_at.
         )
         records = []
         if df is not None and not df.empty:
@@ -274,22 +277,22 @@ def _download(api: API, query: Query):
         if api.preference == "symbol":
             for symbol in query.symbols:
                 records = api.download_on_symbol(symbol, query.start_at, query.stop_at)
-                store_data(query, records)
+                store_data(query, records, api.delay)
         elif api.preference == "time":
             records = api.download_on_time(query.symbols, query.start_at, query.stop_at)
-            store_data(query, records)
+            store_data(query, records, api.delay)
         elif api.preference == "hybrid":
             num_symbols = len(query.symbols)
             if num_symbols == 1:
                 records = api.download_on_symbol(
                     query.symbols[0], query.start_at, query.stop_at
                 )
-                store_data(query, records)
+                store_data(query, records, api.delay)
             elif num_symbols > 1:  # by time
                 records = api.download_on_time(
                     query.symbols, query.start_at, query.stop_at
                 )
-                store_data(query, records)
+                store_data(query, records, api.delay)
             else:
                 raise ValueError("No symbols to download")
         else:

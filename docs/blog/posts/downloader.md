@@ -147,3 +147,7 @@ we take the strict approach, we need a trustful source that tell us that which r
 
 The later one is more pratical: if no data is returned, just assume the data does not exists. Data in the past
 logically will not be updated in the future. So missing data is always missing.
+
+#### The data has not been updated
+
+There're some delay between the data is generated and we can access it. The delay might be very long (for several records behind) so we need to assume the data exists but not available yet.
