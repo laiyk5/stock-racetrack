@@ -21,8 +21,11 @@ def set_timezone(dt):
     return dt
 
 
-@cli.command()
-@click.option("--symbol", required=True, type=str, help="Stock symbol, e.g., 601088.SH")
+@cli.command(name="backtest")
+@click.argument(
+    "strategy", required=True, type=click.Choice(["pyramid"], case_sensitive=False)
+)
+@click.argument("symbol", required=True, type=str)
 @click.option(
     "--start-at",
     required=True,
@@ -38,12 +41,11 @@ def set_timezone(dt):
     default=datetime.now().strftime("%Y-%m-%d"),
 )
 @click.option("-o", "--optimize", is_flag=True, help="Run optimization")
-def pyramid(symbol, start_at, end_at, optimize):
+def backtest_(strategy, symbol, start_at, end_at, optimize):
     logger.info(f"Running pyramid strategy for {symbol} from {start_at} to {end_at}")
     if optimize:
         logger.info("Optimization is enabled.")
 
-    from .pyramid import main as pyramid_main
+    from .pyramid import backtest
 
-    pyramid_main(symbol, start_at, end_at, optimize)
-    logger.info("Pyramid strategy completed.")
+    backtest(symbol, start_at, end_at, optimize)

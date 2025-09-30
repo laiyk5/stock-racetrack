@@ -304,7 +304,7 @@ class SimplePyramid(NaivePyramid):
             self.pyramid_sell()
 
 
-def main(symbol, start_at, end_at, optimize=False):
+def backtest(symbol, start_at, end_at, optimize=False):
     import numpy as np
 
     ds = TushareDatasource()
@@ -336,7 +336,7 @@ def main(symbol, start_at, end_at, optimize=False):
 
 
 if __name__ == "__main__":
-    main(
+    backtest(
         symbol="000001.SZ",
         start_at="2020-01-01",
         end_at="2023-10-01",

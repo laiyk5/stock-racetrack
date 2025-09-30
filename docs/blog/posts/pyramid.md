@@ -1,18 +1,19 @@
 ---
 date:
-  created: 2025-09-28
-  updated: 2025-09-28
+  created: 2025-09-30
+  updated: 2025-09-30
 categories:
-  - Research
-draft: true
+  - Implementation
 ---
 
-# Pyramid Strategy
+# Implementing a Pyramid Strategy
 
 The core idea of the pyramid strategy is to divide your capital into several lots, with each subsequent lot being larger than the previous one. You start by buying a small lot at a higher price, then buy larger lots as the price decreases. Conversely, you sell small lots at lower prices and larger lots as the price rises. This approach aims to accumulate positions at lower average prices and realize profits by selling at higher average prices.
 
 1. The buying price should be a low price.
 2. There must be an opportunity that can help people sell at a higher price.
+
+<!-- more -->
 
 ## Naive Pyramid
 
