@@ -3,10 +3,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import click
+from rich.console import Console
 
-from srt.datasource import config
+from . import config
+from .dbtools import Dataset, Query
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 
 @click.group()
@@ -14,30 +17,34 @@ def cli():
     pass
 
 
-@cli.command()
-def delete_by_bizkey():
-    from srt.datasource.dbtools import delete_rawdata_by_bizkey
+@cli.command(name="delete-dataset")
+@click.argument("provider", type=click.Choice(["tushare"]))
+@click.argument("market", type=click.Choice(["stock", "fund", "index"]))
+@click.argument("dataset", type=str)
+def cmd_delete_dataset(provider, market, dataset):
+    from srt.datasource.dbtools import delete_dataset
 
-    biz_key = click.prompt("Please enter the biz_key to delete", type=str)
+    dataset = Dataset(provider, market, dataset)
     confirm = click.confirm(
-        f"Are you sure you want to delete all records with biz_key = '{biz_key}'? This action cannot be undone.",
+        f"Are you sure you want to delete all records in {dataset}? This action cannot be undone.",
         default=False,
     )
     if confirm:
-        delete_rawdata_by_bizkey(biz_key)
-        click.echo(f"All records with biz_key = '{biz_key}' have been deleted.")
+        delete_dataset(dataset)
+        click.echo(f"All records in {dataset} have been deleted.")
     else:
         click.echo("Operation cancelled.")
 
 
-@cli.command()
-@click.option(
-    "--reset-db", is_flag=True, help="Reset the entire database and all tables."
-)
-@click.option("--reset-tables", is_flag=True, help="Reset all tables in the database.")
-def reset_db_or_tables(reset_db, reset_tables):
+@cli.command(name="reset")
+@click.option("--db", is_flag=True, help="Reset the entire database and all tables.")
+@click.option("--tables", is_flag=True, help="Reset all tables in the database.")
+def cmd_reset_db_or_tables(db, tables):
     from srt.datasource.dbtools import reset_database as _reset_database
     from srt.datasource.dbtools import reset_tables as _reset_tables
+
+    reset_db = db
+    reset_tables = tables
 
     if reset_db:
         confirm = click.confirm(
@@ -63,8 +70,10 @@ def reset_db_or_tables(reset_db, reset_tables):
         click.echo("No action specified. Use --reset-db or --reset-tables.")
 
 
-@cli.command()
-@click.option("--biz-key", prompt="Business Key", help="The business key for the data.")
+@cli.command(name="download")
+@click.argument("provider", type=click.Choice(["tushare"]))
+@click.argument("market", type=click.Choice(["stock", "fund", "index"]))
+@click.argument("name", type=str)
 @click.option(
     "--symbols",
     prompt="Symbols (comma-separated), left empty for all symbols",
@@ -75,15 +84,17 @@ def reset_db_or_tables(reset_db, reset_tables):
     "--start-at",
     prompt="Start At (YYYY-MM-DD:hh:mm:ss)",
     help="The start timestamp for the data update in YYYY-MM-DD:hh:mm:ss format.",
+    type=click.DateTime(formats=["%Y-%m-%d:%H:%M:%S"]),
     default=lambda: datetime(1980, 1, 1).strftime("%Y-%m-%d:%H:%M:%S"),
 )
 @click.option(
     "--stop-at",
     prompt="Stop At (YYYY-MM-DD:hh:mm:ss)",
     help="The end timestamp for the data update in YYYY-MM-DD:hh:mm:ss format.",
+    type=click.DateTime(formats=["%Y-%m-%d:%H:%M:%S"]),
     default=lambda: datetime.now().strftime("%Y-%m-%d:%H:%M:%S"),
 )
-def download(biz_key, symbols, start_at, stop_at):
+def cmd_download(provider, market, name, symbols, start_at, stop_at):
     from srt.datasource.downloader import download
 
     start_at = set_timezone(start_at)
@@ -91,11 +102,11 @@ def download(biz_key, symbols, start_at, stop_at):
 
     symbols = [s.strip() for s in symbols.split(",")] if symbols else []
 
-    download(biz_key, symbols, start_at, stop_at)
-    click.echo(f"Data update for biz_key '{biz_key}' completed up to {stop_at}.")
+    download(Query(Dataset(provider, market, name), symbols, start_at, stop_at))
+    click.echo("Download completed.")
 
 
-def set_timezone(start_at):
+def set_timezone(start_at: datetime):
     start_at = start_at.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
     return start_at
 
@@ -107,7 +118,7 @@ def set_timezone(start_at):
     "value",
     required=False,
 )
-def config_(section_option, value):
+def cmd_config(section_option, value):
     import configparser
 
     from srt.datasource import config as _config
@@ -163,11 +174,9 @@ def config_(section_option, value):
 
 
 @cli.command()
-@click.option(
-    "--provider", required=True, type=click.Choice(["tushare"]), help="Data provider"
-)
-@click.option("--dataset", required=True, type=str, help="")
-@click.option("--symbol", required=True, type=str, help="Stock symbol, e.g., 601088.SH")
+@click.argument("provider", required=True, type=click.Choice(["tushare"]))
+@click.argument("dataset", required=True, type=str)
+@click.argument("symbol", required=True, type=str)
 @click.option(
     "--start-at",
     required=True,
@@ -196,7 +205,7 @@ def show(provider, dataset, symbol, start_at, end_at):
         },
     }
 
-    click.echo(
+    console.print(
         f"Fetching data from provider '{provider}', dataset '{dataset}' for symbol '{symbol}' from {start_at} to {end_at}"
     )
     provider_info = ds_map.get(provider)
@@ -204,6 +213,9 @@ def show(provider, dataset, symbol, start_at, end_at):
         click.echo(f"Dataset '{dataset}' not supported for provider '{provider}'")
         return
 
+    from rich.table import Table
+
     data = provider_info[dataset](symbol, start_at, end_at)
-    click.echo(data)
-    click.echo("Data fetch completed.")
+
+    console.print(data, justify="center")
+    console.print("Data fetch completed.")

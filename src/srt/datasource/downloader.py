@@ -3,14 +3,14 @@ from abc import abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+import pandas as pd
 import tenacity
 from tushare import pro_api, set_token
 
-from srt.datasource.dbtools import get_missing_queries, store_data
-from srt.datasource.tracker import track
-from srt.datasource.utils import get_symbol_list
-
 from . import config
+from .dbtools import Dataset, Query, RawDataRecord, get_missing_queries, store_data
+from .tracker import track
+from .utils import get_symbol_list
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +21,19 @@ class API:
     limit_rpq: int  # records per query
     preference: str = "symbol"  # or "time", or "hybrid"
     frequency: timedelta = timedelta(days=1)
+    dataset: Dataset
 
     @abstractmethod
     def download_on_symbol(
         self, symbol: str, start_at: datetime, stop_at: datetime
-    ) -> list[tuple[str, str, datetime, datetime, str]]:
+    ) -> list[RawDataRecord]:
         """Download data for a single symbol of a time range."""
         ...
 
     @abstractmethod
     def download_on_time(
         self, symbols: list[str], start_at: datetime, stop_at: datetime
-    ) -> list[tuple[str, str, datetime, datetime, str]]:
+    ) -> list[RawDataRecord]:
         """Download data for multiple symbols of a time range smaller than the frequency."""
         ...
 
@@ -41,15 +42,16 @@ class TushareAPI(API):
 
     def __init__(
         self,
-        api_method: Callable,
-        biz_key: str,
+        api_method: Callable[..., pd.DataFrame],
+        dataset: Dataset,
         limit_qps: int = 10,
         limit_rpq: int = 6000,
         preference: str = "hybrid",
         frequency: timedelta = timedelta(days=1),
     ):
         set_token(config.get("tushare", "token"))
-        self.biz_key = biz_key
+        self.dataset = dataset
+        self.dataset.provider = "tushare"
         self.limit_qps = limit_qps
         self.limit_rpq = limit_rpq
         self.preference = preference
@@ -57,17 +59,16 @@ class TushareAPI(API):
 
         self.api_method = api_method
 
-    def _transform_record(self, row) -> tuple[str, str, datetime, datetime, str]:
+    def _transform_record(self, row) -> RawDataRecord:
         timestamp = datetime.strptime(row["trade_date"], "%Y%m%d")
         timestamp = timestamp.replace(
             tzinfo=timezone(timedelta(hours=8))
         )  # Asia/Shanghai
-        return (
-            self.biz_key,  # biz_key
-            row["ts_code"],  # symbol
-            timestamp,  # timestamp
-            timestamp + self.frequency,  # end timestamp
-            row.to_json(),  # data
+        return RawDataRecord(
+            symbol=row["ts_code"],  # symbol
+            start_at=timestamp,  # timestamp
+            stop_at=timestamp + self.frequency,  # end timestamp
+            data=row.to_json(),  # data
         )
 
     @tenacity.retry(
@@ -121,12 +122,10 @@ class TushareAPI(API):
         return records
 
 
-def merge_missing_queries(
-    api: API, missing_queries: list[tuple[str, str, datetime, datetime]]
-) -> list[tuple[str, list[str], datetime, datetime]]:
+def merge_missing_queries(api: API, missing_queries: list[Query]) -> list[Query]:
     """The merge algorithm merge missing queries into larger queries based on api's preference and limit.
 
-    Given a list of missing queries, each query is a tuple of (biz_key, symbols, start_at, stop_at) with same biz_key.
+    Given a list of missing queries, each query is a Query object with a same dataset.
     Returns a list of merged queries.
 
     The size of a query is defined as the number of records it will return, which is:
@@ -156,117 +155,112 @@ def merge_missing_queries(
         raise ValueError(f"Unknown preference: {api.preference}")
 
 
-def merge_symbols(
-    api: API, missing_queries: list[tuple[str, str, datetime, datetime]]
-) -> list[tuple[str, list[str], datetime, datetime]]:
+def merge_symbols(api: API, missing_queries: list[Query]) -> list[Query]:
     """Divide the time range into chunks of api.frequency and merge the same symbol in the same time chunk.
 
     Do not merge symbols from different time chunks.
     If merging the next query exceeds api.limit_rpq, start a new merged query.
     """
 
-    chuncked_queries = {}
-    for biz_key, symbol, start_at, stop_at in missing_queries:
-        current_start = start_at
-        while current_start < stop_at:
-            current_end = min(current_start + api.frequency, stop_at)
-            key = (biz_key, current_start, current_end)
-            if key not in chuncked_queries:
-                chuncked_queries[key] = []
-            chuncked_queries[key].append(symbol)
+    chunked_queries = {}
+    for q in missing_queries:
+        current_start = q.start_at
+        while current_start < q.stop_at:
+            current_end = min(current_start + api.frequency, q.stop_at)
+            key = (q.dataset, current_start, current_end)
+            if key not in chunked_queries:
+                chunked_queries[key] = []
+            chunked_queries[key].append(q.symbols[0])
             current_start = current_end
 
     merged_queries = []
     current_query = None
-    for (biz_key, start_at, stop_at), symbols in sorted(chuncked_queries.items()):
+    for (dataset, start_at, stop_at), symbols in sorted(chunked_queries.items()):
         if current_query is None:
-            current_query = (biz_key, symbols, start_at, stop_at)
+            current_query = Query(dataset, symbols, start_at, stop_at)
         else:
-            current_biz_key, current_symbols, current_start_at, current_stop_at = (
-                current_query
-            )
             # if the same time chunk and not exceeds limit
-            estimated_size = len(current_symbols + symbols) * (
-                (current_stop_at - current_start_at) // api.frequency
+            estimated_size = len(current_query.symbols + symbols) * (
+                (current_query.stop_at - current_query.start_at) // api.frequency
             )
             if (
-                biz_key == current_biz_key
-                and start_at == current_start_at
-                and stop_at == current_stop_at
+                dataset == current_query.dataset
+                and start_at == current_query.start_at
+                and stop_at == current_query.stop_at
                 and estimated_size <= api.limit_rpq
             ):
                 # merge into current query
-                current_query = (
-                    current_biz_key,
-                    current_symbols + symbols,
-                    current_start_at,
-                    current_stop_at,
+                current_query = Query(
+                    current_query.dataset,
+                    current_query.symbols + symbols,
+                    current_query.start_at,
+                    current_query.stop_at,
                 )
             else:
                 # save current query and start a new one
                 merged_queries.append(current_query)
-                current_query = (biz_key, symbols, start_at, stop_at)
+                current_query = Query(
+                    current_query.dataset,
+                    symbols,
+                    start_at,
+                    stop_at,
+                )
     if current_query is not None:
         merged_queries.append(current_query)
 
     return merged_queries
 
 
-def merge_timeranges(
-    api: API, missing_queries: list[tuple[str, str, datetime, datetime]]
-) -> list[tuple[str, list[str], datetime, datetime]]:
+def merge_timeranges(api: API, missing_queries: list[Query]) -> list[Query]:
     """Merge queries of the same symbol.
 
     If merging the next query exceeds api.limit_rpq, start a new merged query.
     """
     merged_queries = []
     current_query = None
-    for biz_key, symbol, start_at, stop_at in sorted(missing_queries):
+    for q in sorted(missing_queries, key=lambda x: (x.symbols[0], x.start_at)):
         if current_query is None:
-            current_query = (biz_key, symbol, start_at, stop_at)
+            current_query = q
         else:
-            current_biz_key, current_symbol, current_start_at, current_stop_at = (
-                current_query
-            )
             # if the same symbol and not exceeds limit
-            estimated_size = (stop_at - current_start_at) // api.frequency
+            estimated_size = (q.stop_at - current_query.start_at) // api.frequency
             if (
-                biz_key == current_biz_key
-                and symbol == current_symbol
+                q.dataset == current_query.dataset
+                and q.symbols[0] == current_query.symbols[0]
                 and estimated_size > api.limit_rpq
             ):
                 # merge into current query
-                current_query = (
-                    current_biz_key,
-                    current_symbol,
-                    current_start_at,
-                    stop_at,
+                current_query = Query(
+                    q.dataset,
+                    q.symbols,
+                    current_query.start_at,
+                    q.stop_at,
                 )
             else:
                 # save current query and start a new one
                 merged_queries.append(current_query)
-                current_query = (biz_key, symbol, start_at, stop_at)
+                current_query = Query(
+                    q.dataset,
+                    q.symbols,
+                    q.start_at,
+                    q.stop_at,
+                )
+
     if current_query is not None:
         merged_queries.append(current_query)
-
-    # convert symbol to list
-    merged_queries = [
-        (biz_key, [symbol], start_at, stop_at)
-        for biz_key, symbol, start_at, stop_at in merged_queries
-    ]
 
     return merged_queries
 
 
-def _download(api: API, symbols: list[str], start_at: datetime, stop_at: datetime):
-    stop_at = min(datetime.now(tz=stop_at.tzinfo), stop_at)
-    start_at = max(start_at, datetime(1989, 1, 1, tzinfo=start_at.tzinfo))
+def _download(api: API, query: Query):
+    stop_at = min(datetime.now(tz=query.stop_at.tzinfo), query.stop_at)
+    start_at = max(query.start_at, datetime(1989, 1, 1, tzinfo=query.start_at.tzinfo))
     if start_at >= stop_at:
         logger.info("No data to download.")
         return
-    query = (api.biz_key, symbols, start_at, stop_at)
+
     logger.debug(
-        f"Downloading with query: {api.biz_key}, {symbols[:5]}...({len(symbols) - 5} more), {start_at}, {stop_at}"
+        f"Downloading with query: {query.dataset}, {query.symbols[:5]}...({len(query.symbols) - 5} more), {start_at}, {stop_at}"
     )
     missing_queries = get_missing_queries(query)
     logger.debug(f"Sample missing queries: {missing_queries[:5]}")
@@ -274,24 +268,27 @@ def _download(api: API, symbols: list[str], start_at: datetime, stop_at: datetim
     logger.debug(f"Sample merged missing queries: {merged_missing_queries[:5]}")
 
     for query in track(merged_missing_queries):
-        biz_key, symbols, start_at, stop_at = query
         logger.info(
-            f"Downloading data for {len(symbols)} symbols from {start_at} to {stop_at}..."
+            f"Downloading data for {len(query.symbols)} symbols from {query.start_at} to {query.stop_at}..."
         )
         if api.preference == "symbol":
-            for symbol in symbols:
-                records = api.download_on_symbol(symbol, start_at, stop_at)
+            for symbol in query.symbols:
+                records = api.download_on_symbol(symbol, query.start_at, query.stop_at)
                 store_data(query, records)
         elif api.preference == "time":
-            records = api.download_on_time(symbols, start_at, stop_at)
+            records = api.download_on_time(query.symbols, query.start_at, query.stop_at)
             store_data(query, records)
         elif api.preference == "hybrid":
-            num_symbols = len(symbols)
+            num_symbols = len(query.symbols)
             if num_symbols == 1:
-                records = api.download_on_symbol(symbols[0], start_at, stop_at)
+                records = api.download_on_symbol(
+                    query.symbols[0], query.start_at, query.stop_at
+                )
                 store_data(query, records)
             elif num_symbols > 1:  # by time
-                records = api.download_on_time(symbols, start_at, stop_at)
+                records = api.download_on_time(
+                    query.symbols, query.start_at, query.stop_at
+                )
                 store_data(query, records)
             else:
                 raise ValueError("No symbols to download")
@@ -316,41 +313,34 @@ TUSHARE_AVAILABLE_DATASETS = {
 }
 
 
-def tushare_download(
-    biz_key: str, symbols: list[str], start_at: datetime, stop_at: datetime
-):
-    _, dataset = biz_key.split("_", 1)
+def tushare_download(query: Query):
 
-    if dataset not in TUSHARE_AVAILABLE_DATASETS:
-        raise ValueError(f"Unknown dataset: {dataset}")
-    dataset_info = TUSHARE_AVAILABLE_DATASETS[dataset]
+    if query.dataset.name not in TUSHARE_AVAILABLE_DATASETS:
+        raise ValueError(f"Unknown dataset: {query.dataset.name}")
+
+    dataset_info = TUSHARE_AVAILABLE_DATASETS[query.dataset.name]
     api_method = dataset_info["method"]
     api = TushareAPI(
         api_method=api_method,
-        biz_key=biz_key,
+        dataset=query.dataset,
         limit_qps=10,
         limit_rpq=6000,
         preference="hybrid",
         frequency=timedelta(days=1),
     )
-    if symbols == []:
-        symbols = get_symbol_list(dataset_info["symbol_type"])
+    if query.symbols == []:
+        query.symbols = get_symbol_list(dataset_info["symbol_type"])
 
-    _download(api, symbols, start_at, stop_at)
+    _download(api, query)
 
 
 AVAILABLE_PROVIDER = {"tushare": tushare_download}
 
 
-def download(biz_key: str, symbols: list[str], start_at: datetime, stop_at: datetime):
-    import re
+def download(query: Query):
 
-    re.match(r"^[a-zA-Z0-9_]+_[a-zA-Z0-9_]+$", biz_key) or ValueError("Invalid biz_key")
+    if query.dataset.provider not in AVAILABLE_PROVIDER:
+        raise ValueError(f"Unknown provider: {query.dataset.provider}")
 
-    provider, dataset = biz_key.split("_", 1)
-
-    if provider not in AVAILABLE_PROVIDER:
-        raise ValueError(f"Unknown provider: {provider}")
-
-    handler = AVAILABLE_PROVIDER[provider]
-    handler(biz_key, symbols, start_at, stop_at)
+    handler = AVAILABLE_PROVIDER[query.dataset.provider]
+    handler(query)

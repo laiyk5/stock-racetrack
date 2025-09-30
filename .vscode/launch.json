@@ -4,7 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
             "name": "Test Download",
             "type": "debugpy",
@@ -12,10 +11,11 @@
             "module": "srt.cli",
             "console": "integratedTerminal",
             "args": [
+                "ds",
                 "download",
-                "download",
-                "--biz-key",
-                "tushare_daily",
+                "tushare",
+                "stock",
+                "daily",
                 "--symbols",
                 "000001.SZ,000002.SZ,600083.SH",
                 "--start-at",
@@ -34,6 +34,22 @@
                 "download",
                 "reset-db-or-tables",
                 "--reset-db"
+            ],
+        },
+        {
+            "name": "Run ds show",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "srt.cli",
+            "console": "integratedTerminal",
+            "args": [
+                "ds",
+                "show",
+                "tushare",
+                "stock_price_ohlcv_daily",
+                "601088.SH",
+                "--start-at",
+                "1980-01-01:00:00:00",
             ],
         },
         {

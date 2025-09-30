@@ -7,7 +7,8 @@ import psycopg
 
 logger = logging.getLogger(__name__)
 
-from .dbtools import DB_NAME, get_conn_str
+from . import config
+from .dbtools import Dataset, Query, get_conn_str
 
 
 class Datasource(ABC):
@@ -23,25 +24,33 @@ from .downloader import download
 
 
 class TushareDatasource(Datasource):
+    provider = "tushare"
 
     @staticmethod
     def get_stock_price_ohlcv_daily(
         symbol: str, start_at: datetime, end_at: datetime
     ) -> pd.DataFrame:
+        dataset = Dataset(TushareDatasource.provider, "stock", "daily")
         try:
-            download("tushare_daily", [symbol], start_at, end_at)
+            download(
+                Query(
+                    dataset,
+                    [symbol],
+                    start_at,
+                    end_at,
+                )
+            )
         except Exception as e:
-            logger.warning(f"Error downloading data: {e}")
-
-        with psycopg.connect(get_conn_str(DB_NAME)) as conn:
+            logger.error(f"Error downloading data: {e}", exc_info=True)
+        with psycopg.connect(get_conn_str(config.get("database", "dbname"))) as conn:
             with conn.cursor() as cur:
                 query = """
                 SELECT * FROM raw_data
-                WHERE biz_key = %s AND symbol = %s
+                WHERE dataset_id = %s AND symbol = %s
                 AND tstzrange && tstzrange(%s, %s, '[)')
                 ORDER BY tstzrange
                 """
-                cur.execute(query, ("tushare_daily", symbol, start_at, end_at))
+                cur.execute(query, (dataset.id(), symbol, start_at, end_at))
                 rows = cur.fetchall()
                 if not rows:
                     raise ValueError(
