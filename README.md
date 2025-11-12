@@ -32,9 +32,7 @@ This downloader can help you update your local db from your data provider effici
 The downloader cli provide a default method that fetches all stock's data. If you choose to download all stock's data, the first initialization will takes several hours, but only several seconds taken for daily update after that. 50 GB or more free storage space is recommended.
 
 ```bash
-srt ds download --biz-key tushare_daily --symbol
-s ALL --start-at 2025-01-01:00:00:00 --stop-at 2026-
-01-01:00:00:00
+srt ds download tushare stock daily --symbols 000001.SZ
 ```
 
 ## Configuration
