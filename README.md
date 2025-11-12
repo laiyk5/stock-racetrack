@@ -5,6 +5,21 @@ My stock research toolset.
 > [!WARNING]
 > This package is in active develop. User interface might suffer from severe changes.
 
+## Installation
+
+- [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+- create virtual environment and install dependencies by:
+
+```sh
+uv sync
+```
+
+- check if `srt` is available in your environment:
+
+```sh
+srt
+```
+
 ## Usage
 
 ### srt.datasource
@@ -30,6 +45,16 @@ For example, to set tushare token:
 
 ```bash
 srt ds config tushare.token "<YOUR_TOKEN_HERE>"
+```
+
+For example, to set database token:
+
+```bash
+srt ds config database.host localhost
+srt ds config database.port 5433
+srt ds config database.user example_user
+srt ds config database.password example_password
+srt ds config database.dbname srt_ds
 ```
 
 ## Development Progress
