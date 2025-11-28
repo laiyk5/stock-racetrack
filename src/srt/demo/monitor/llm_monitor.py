@@ -5,34 +5,54 @@ from typing import Iterable
 from openai import OpenAI
 
 from srt import check
-from srt.monitor import Stock, StockListProvider
+from srt.monitor import Asset, Currency, Portfolio, PortfolioProvider, Security
 from srt.monitor.monitors import ChatBot, LLMMonitor
 from srt.monitor.publishers import FileSuggestionPublisher, LoggerSuggestionPublisher
 
 
-class DemoStockListProvider(StockListProvider):
-    def get_stocks(self):
-        return [
-            # Stock(market="NASDAQ", symbol="AAPL", type="share", alias="Apple Inc."),
-            # Stock(market="NASDAQ", symbol="GOOGL", type="share", alias="Alphabet Inc."),
-            # Stock(market="NYSE", symbol="TSLA", type="share", alias="Tesla Inc."),
-            # Stock(market="NYSE", symbol="AMZN", type="share", alias="Amazon.com Inc."),
-            # Stock(market="Shanghai", symbol="600938", type="share", alias="中国海油"),
-            # Stock(market="Shanghai", symbol="600132", type="share", alias="重庆啤酒"),
-            # Stock(market="China", symbol="159842", type="etf", alias="券商ETF"),
-            # Stock(market="China", symbol="515100", type="etf", alias="红利低波100ETF"),
-            # Stock(market="China", symbol="512800", type="etf", alias="银行ETF"),
-            Stock(market="ShenZhen", alias="三花智控", symbol="002050", type="share"),
-            Stock(market="ShenZhen", symbol="002510", alias="天汽模", type="share"),
-            Stock(market="ShenZhen", symbol="003008", alias="开普检测", type="share"),
-            Stock(market="ShenZhen", symbol="002970", alias="锐明技术", type="share"),
-            Stock(market="ShenZhen", symbol="002589", alias="瑞康医药", type="share"),
-            Stock(market="ShenZhen", symbol="300632", alias="光莆股份", type="share"),
-            Stock(market="ShenZhen", symbol="002108", alias="沧州明珠", type="share"),
-            Stock(market="ShenZhen", symbol="300558", alias="贝达药业", type="share"),
-            Stock(market="ShenZhen", symbol="300260", alias="新莱应材", type="share"),
-            Stock(market="ShenZhen", alias="比亚迪", symbol="002594", type="share"),
-        ]
+class DemoPortfolioProvider(PortfolioProvider):
+    def get_portfolio(self) -> Portfolio:
+        return Portfolio(
+            assets=[
+                Asset(
+                    target=Currency(code="CNY"), quantity=18833.32, average_cost=1.0
+                ),  # !NOTE: Should currency have average_cost?
+                Asset(
+                    target=Security(
+                        market="Shanghai",
+                        symbol="600132",
+                        type="share",
+                        alias="重庆啤酒",
+                    ),
+                    quantity=100,
+                    average_cost=54.11,
+                ),  # !NOTE: Should average_cost have unit?
+                Asset(
+                    target=Security(
+                        market="China", symbol="159842", type="etf", alias="券商ETF"
+                    ),
+                    quantity=4500,
+                    average_cost=1.172,
+                ),
+                Asset(
+                    target=Security(
+                        market="China",
+                        symbol="515100",
+                        type="etf",
+                        alias="红利低波100ETF",
+                    ),
+                    quantity=3200,
+                    average_cost=1.557,
+                ),
+                Asset(
+                    target=Security(
+                        market="China", symbol="600938", type="share", alias="中国海油"
+                    ),
+                    quantity=100,
+                    average_cost=29.289,
+                ),
+            ]
+        )
 
 
 class DashscopeChatBot(ChatBot):
@@ -94,8 +114,8 @@ if __name__ == "__main__":
     with open("srt_demo_suggestions.log", "a") as f:
         f.write(f"\n\n--- New Run at {datetime.now().isoformat()} ---\n")
         monitor = LLMMonitor(
-            stock_list_provider=DemoStockListProvider(),
-            message_sources=[],
+            portfolio_provider=DemoPortfolioProvider(),
+            pure_text_event_sources=[],
             suggestion_publishers=[
                 LoggerSuggestionPublisher(),
                 FileSuggestionPublisher(f),

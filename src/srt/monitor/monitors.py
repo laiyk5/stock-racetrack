@@ -1,13 +1,11 @@
-import inspect
 import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from pyexpat.errors import messages
-from typing import Iterable, Literal, Optional
+from typing import Iterable, Optional
 
 import tenacity
-from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 from tenacity import retry
 
@@ -15,8 +13,8 @@ from . import (
     Event,
     EventSource,
     Monitor,
-    Stock,
-    StockListProvider,
+    Portfolio,
+    PortfolioProvider,
     Suggestion,
     SuggestionPublisher,
 )
@@ -33,12 +31,16 @@ def pydantic_schema_dumps(model: type[BaseModel]):
     return json.dumps(model.model_json_schema(), ensure_ascii=False, indent=2)
 
 
+class PureTextEvent(Event):
+    content: str
+
+
 class UserInput(BaseModel):
     now: str  # ISO 8601 format
     start_time: str  # ISO 8601 format
     end_time: str  # ISO 8601 format
-    stocks: list[Stock]  # Comma-separated stock symbols
-    additional_events: list[Event]  # Additional context or events
+    portfolio: Portfolio  # Comma-separated stock symbols
+    additional_events: list[PureTextEvent]  # Additional context or events
 
 
 class Document(BaseModel):
@@ -55,9 +57,6 @@ class LLMOutput(BaseModel):
     note: Optional[str] = None
 
 
-from openai.types.chat import ChatCompletionMessageParam
-
-
 class ChatBot(ABC):
     @abstractmethod
     def chat(self, messages: Iterable[ChatCompletionMessageParam]) -> str:
@@ -67,14 +66,18 @@ class ChatBot(ABC):
 class LLMMonitor(Monitor):
     def __init__(
         self,
-        stock_list_provider: StockListProvider,
-        message_sources: Iterable[EventSource],
+        portfolio_provider: PortfolioProvider,
+        pure_text_event_sources: Iterable[EventSource[PureTextEvent]],
         suggestion_publishers: Iterable[SuggestionPublisher],
         chatbot: ChatBot,
         parsed_err_tolerance: float = 0.8,
     ):
-        super().__init__(stock_list_provider, message_sources, suggestion_publishers)
+        super().__init__(portfolio_provider, suggestion_publishers)
         self._chatbot = chatbot
+        self._pure_text_event_sources = pure_text_event_sources
+
+        if parsed_err_tolerance < 0.0 or parsed_err_tolerance > 1.0:
+            raise ValueError("parsed_err_tolerance must be between 0.0 and 1.0")
 
         self._parsed_err_tolerance = parsed_err_tolerance
 
@@ -84,11 +87,11 @@ class LLMMonitor(Monitor):
                 "End time %s is in the future. Adjusting to current time.", end_time
             )
             end_time = datetime.now(tz=start_time.tzinfo)
-        stocks = list(self._stock_list_provider.get_stocks())
-        all_events = []
+        portfolio = self._portfolio_provider.get_portfolio()
 
-        # Gather all events. # !NOTE: this would miss events happend between during source fetching and the suggestion generations. Better improve this.
-        for source in self._message_sources:
+        # Gather all events.
+        all_events: list[PureTextEvent] = []
+        for source in self._pure_text_event_sources:
             events = source.fetch(start_time, end_time)
             all_events.extend(events)
 
@@ -96,7 +99,7 @@ class LLMMonitor(Monitor):
             now=datetime.now(tz=start_time.tzinfo).isoformat(),
             start_time=start_time.isoformat(),
             end_time=end_time.isoformat(),
-            stocks=stocks,
+            portfolio=portfolio,
             additional_events=all_events,
         )
 
@@ -107,8 +110,8 @@ class LLMMonitor(Monitor):
         "You are a stock monitoring assistant. The user would provide a JSON input, its schema is as below:\n"
         + pydantic_schema_dumps(UserInput)
         + "\nWhat you need to do are:"
-        + "1. Search the web for any important news or events related to the provided stocks that happened between 'start_time' and 'end_time'.\n"
-        + "2. Analyze the events from the input and the additional events you found from the web, and identify any significant events that could impact the stock prices of the provided stocks.\n"
+        + "1. Search the web for any important news or events related to the provided asset that happened between 'start_time' and 'end_time'.\n"
+        + "2. Analyze the events from the input and the additional events you found from the web, and identify any significant events that could impact the stock prices of the provided portfolio.\n"
         + "3. Respond with a JSON object LLMOutput, It contains a list of Suggestions you made, along with the all document you read. If you have any other things want to convey, put them into the 'note' field. The schema of LLMOutput is as below:\n"
         + pydantic_schema_dumps(LLMOutput)
         + "4. If there is no suggestion, explain why in 'note' and always response a valid JSON object with an empty array in 'suggestions' field.\n"
@@ -127,14 +130,21 @@ class LLMMonitor(Monitor):
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
     )
     def _call_llm(self, user_input: UserInput) -> Iterable[Suggestion]:
-        logger.debug("Calling LLM with user input: %s", pydantic_dumps(user_input))
+        try:
+            logger.debug("Calling LLM with user input: %s", pydantic_dumps(user_input))
+        except Exception as e:
+            logger.error("Failed to serialize user input for logging: %s", e)
 
-        response_str = self._chatbot.chat(
-            messages=[
-                {"role": "system", "content": self.PROMPT_SYS},
-                {"role": "user", "content": pydantic_dumps(user_input)},
-            ]
-        )
+        try:
+            response_str = self._chatbot.chat(
+                messages=[
+                    {"role": "system", "content": self.PROMPT_SYS},
+                    {"role": "user", "content": pydantic_dumps(user_input)},
+                ]
+            )
+        except Exception as e:
+            logger.error("Error calling chatbot: %s", e)
+            raise e
 
         # try parse the response content as JSON
         try:
