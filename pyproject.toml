@@ -6,7 +6,7 @@ authors = [
 ]
 description = "A stock research tool"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 classifiers = [
     "Private :: Do Not Upload",
     "Programming Language :: Python :: 3",
