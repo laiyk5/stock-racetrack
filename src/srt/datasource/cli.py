@@ -194,7 +194,7 @@ def cmd_config(section_option, value):
     default=datetime.now().strftime("%Y-%m-%d:%H:%M:%S"),
 )
 def show(provider, dataset, symbol, start_at, end_at):
-    from srt.datasource.datasource import TushareDatasource
+    from srt.datasource.datasource.datasource import TushareDatasource
 
     start_at = set_timezone(start_at)
     end_at = set_timezone(end_at)

@@ -17,6 +17,7 @@ dependencies = [
     "backtesting>=0.6.5",
     "cachetools>=6.2.0",
     "click>=8.3.0",
+    "dotenv>=0.9.9",
     "matplotlib>=3.10.6",
     "pre-commit>=4.3.0",
     "psycopg[binary]>=3.2.10",
