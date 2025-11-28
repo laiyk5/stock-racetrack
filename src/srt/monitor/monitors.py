@@ -1,209 +1,92 @@
-import json
 import logging
-from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Iterable, Optional
 
-import tenacity
-from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel
-from tenacity import retry
-
-from . import (
-    Event,
-    EventSource,
-    Monitor,
-    Portfolio,
-    PortfolioProvider,
-    Suggestion,
-    SuggestionPublisher,
-)
+from . import Consultant, Monitor, PortfolioProvider, SuggestionPublisher
 
 logger = logging.getLogger(__name__)
 
 
-def pydantic_dumps(obj: BaseModel):
-    logger.debug("Serializing object of type %s", type(obj).__name__)
-    return json.dumps(obj.model_dump(), ensure_ascii=False, indent=2)
-
-
-def pydantic_schema_dumps(model: type[BaseModel]):
-    return json.dumps(model.model_json_schema(), ensure_ascii=False, indent=2)
-
-
-class PureTextEvent(Event):
-    content: str
-
-
-class UserInput(BaseModel):
-    now: str  # ISO 8601 format
-    start_time: str  # ISO 8601 format
-    end_time: str  # ISO 8601 format
-    portfolio: Portfolio  # Comma-separated stock symbols
-    additional_events: list[PureTextEvent]  # Additional context or events
-
-
-class Document(BaseModel):
-    title: str
-    source: str
-    url: Optional[str] = None
-    summary: Optional[str] = None
-
-
-class LLMOutput(BaseModel):
-    current_time: str  # ISO 8601 format
-    suggestions: list[Suggestion]
-    document_read: list[Document]
-    note: Optional[str] = None
-
-
-class ChatBot(ABC):
-    @abstractmethod
-    def chat(self, messages: Iterable[ChatCompletionMessageParam]) -> str:
-        pass  # Placeholder for chat method
-
-
-class LLMMonitor(Monitor):
+class SimpleMonitor(Monitor):
     def __init__(
         self,
+        consultant: Consultant,
         portfolio_provider: PortfolioProvider,
-        pure_text_event_sources: Iterable[EventSource[PureTextEvent]],
         suggestion_publishers: Iterable[SuggestionPublisher],
-        chatbot: ChatBot,
-        parsed_err_tolerance: float = 0.8,
     ):
-        super().__init__(portfolio_provider, suggestion_publishers)
-        self._chatbot = chatbot
-        self._pure_text_event_sources = pure_text_event_sources
+        self._consultant = consultant
+        self._portfolio_provider = portfolio_provider
+        self._suggestion_publishers = suggestion_publishers
+        self._logger = logging.getLogger(__name__ + "." + self.__class__.__name__)
 
-        if parsed_err_tolerance < 0.0 or parsed_err_tolerance > 1.0:
-            raise ValueError("parsed_err_tolerance must be between 0.0 and 1.0")
+    def loop(
+        self, since: datetime, interval: float = 300, until: Optional[datetime] = None
+    ) -> None:
+        """Boost the monitoring process and let it load and process messages since the given time."""
+        import time
 
-        self._parsed_err_tolerance = parsed_err_tolerance
-
-    def gen_suggestions(self, start_time, end_time):
-        if end_time > datetime.now(tz=start_time.tzinfo):
+        if interval < 30:
             self._logger.warning(
-                "End time %s is in the future. Adjusting to current time.", end_time
+                "Interval is set to less than 30 seconds, which may lead to rate limiting."
             )
-            end_time = datetime.now(tz=start_time.tzinfo)
-        portfolio = self._portfolio_provider.get_portfolio()
 
-        # Gather all events.
-        all_events: list[PureTextEvent] = []
-        for source in self._pure_text_event_sources:
-            events = source.fetch(start_time, end_time)
-            all_events.extend(events)
+        repeat_condition = lambda _: until is None or since < until
 
-        user_input = UserInput(
-            now=datetime.now(tz=start_time.tzinfo).isoformat(),
-            start_time=start_time.isoformat(),
-            end_time=end_time.isoformat(),
-            portfolio=portfolio,
-            additional_events=all_events,
-        )
+        loop_count = 0
+        while repeat_condition(since):
+            self._logger.info(f"This is the {loop_count}-th monitoring loop.")
+            now = datetime.now(tz=since.tzinfo)
+            interval_timer = time.time()
 
-        suggestions = self._call_llm(user_input)
-        yield from suggestions  # Assuming suggestions is an iterable of Suggestion objects
-
-    PROMPT_SYS = (
-        "You are a stock monitoring assistant. The user would provide a JSON input, its schema is as below:\n"
-        + pydantic_schema_dumps(UserInput)
-        + "\nWhat you need to do are:"
-        + "1. Search the web for any important news or events related to the provided asset that happened between 'start_time' and 'end_time'.\n"
-        + "2. Analyze the events from the input and the additional events you found from the web, and identify any significant events that could impact the stock prices of the provided portfolio.\n"
-        + "3. Respond with a JSON object LLMOutput, It contains a list of Suggestions you made, along with the all document you read. If you have any other things want to convey, put them into the 'note' field. The schema of LLMOutput is as below:\n"
-        + pydantic_schema_dumps(LLMOutput)
-        + "4. If there is no suggestion, explain why in 'note' and always response a valid JSON object with an empty array in 'suggestions' field.\n"
-        + "\nNotice:\n"
-        + "1. The 'now' field in User input is correct. Use it as the current time reference.\n"
-        + "2. User might provide no events. You should try to gather events by yourself. If you can't, return an empty JSON array: []\n"
-        + "3. Make sure the response is a valid JSON array, and can be parsed correctly."
-        + "4. You can search any additional information from the web if needed. But the suggestions should only based on the events happend between start_time and end_time."
-        + "5. If you make a suggestion, always provide the 'reason' field and 'relative_events' field with at least one event. Don't suggest if you can't provide reason or relative events."
-    )
-
-    @retry(
-        wait=tenacity.wait_exponential(min=1, max=10),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
-    )
-    def _call_llm(self, user_input: UserInput) -> Iterable[Suggestion]:
-        try:
-            logger.debug("Calling LLM with user input: %s", pydantic_dumps(user_input))
-        except Exception as e:
-            logger.error("Failed to serialize user input for logging: %s", e)
-
-        try:
-            response_str = self._chatbot.chat(
-                messages=[
-                    {"role": "system", "content": self.PROMPT_SYS},
-                    {"role": "user", "content": pydantic_dumps(user_input)},
-                ]
+            portfolio = self._portfolio_provider.get_portfolio()
+            suggestions = self._consultant.consult(
+                portfolio=portfolio, start_time=since, end_time=now
             )
-        except Exception as e:
-            logger.error("Error calling chatbot: %s", e)
-            raise e
+            since = now
 
-        # try parse the response content as JSON
-        try:
-            if response_str is None:
-                raise ValueError("Response content is None")
+            suggestions_counter = 0
+            long_sug_counter = 0
+            short_sug_counter = 0
 
-            logger.debug("LLM response content: %s", response_str)
+            for suggestion in suggestions:
+                suggestions_counter += 1
+                long_sug_counter += (
+                    1 if suggestion.delta_asset.delta_quantity > 0 else 0
+                )
+                short_sug_counter += (
+                    1 if suggestion.delta_asset.delta_quantity < 0 else 0
+                )
+                self._logger.debug(
+                    f"Publishing the {suggestions_counter}-th suggestion: {suggestion}"
+                )
+                for publisher in self._suggestion_publishers:
+                    publisher.publish(suggestion)
 
-            # try locade the first and last square brackets
-            first_bracket = response_str.index("{")
-            last_bracket = response_str.rindex("}") + 1
-            response_str = response_str[first_bracket:last_bracket].strip()
-            if len(response_str) == 0:
-                raise ValueError("No JSON object found in response")
-            llm_output_data = json.loads(response_str)
+            self._logger.info(
+                f"From {since} to {now}, generated {suggestions_counter} suggestions (total), {long_sug_counter} BUY, {short_sug_counter} SELL"
+            )
 
-            try:
-                llm_output = LLMOutput.model_validate(llm_output_data)
-                logger.debug("Documents read: %d", len(llm_output.document_read))
-                logger.info("Note: %s", llm_output.note)
-                return llm_output.suggestions
-            except Exception as e:
-                logger.error("Failed to validate LLM output data: %s", e)
-                try:
-                    logger.debug("Trying to parse suggestions individually.")
-                    suggestions_data = llm_output_data["suggestions"]
-                    parsed_suggestions = []
+            elapsed = time.time() - interval_timer
 
-                    for item in suggestions_data:
-                        suggestion = Suggestion.model_validate(item)
-                        parsed_suggestions.append(suggestion)
+            if elapsed < interval:
+                self._logger.info(
+                    "Sleeping for %s seconds to respect the interval.",
+                    interval - elapsed,
+                )
+                # check the repeat condition before sleeping
+                if not repeat_condition(since):
+                    break
+                time.sleep(interval - elapsed)
+            else:
+                self._logger.warning(
+                    "Processing took longer (%s seconds) than the interval (%s seconds).",
+                    elapsed,
+                    interval,
+                )
 
-                    n_expected = len(suggestions_data)
-                    n_parsed = len(parsed_suggestions)
+            loop_count += 1
 
-                    if n_expected != 0 and n_parsed == 0:
-                        raise ValueError(
-                            "Failed to parse any suggestions from LLM response"
-                        )
+        self._logger.info("Monitoring loop has ended.")
 
-                    # allow partial parsing with warning
-                    if n_expected != 0 and n_parsed < n_expected:
-                        logger.warning(
-                            "Some suggestions failed to parse from LLM response: expected %d, got %d",
-                            n_expected,
-                            n_parsed,
-                        )
-                        if n_parsed / n_expected < self._parsed_err_tolerance:
-                            raise ValueError(
-                                "Parsed suggestions ratio below tolerance: expected %d, got %d"
-                                % (n_expected, n_parsed)
-                            )
-                    return parsed_suggestions
-                except Exception as e2:
-                    logger.error(
-                        "Failed to parse suggestions from LLM output data: %s", e2
-                    )
-                    raise e2 from e
 
-        except Exception as e:
-            logger.error("Failed to parse LLM response: %s", e)
-            raise e
+__all__ = ["SimpleMonitor"]

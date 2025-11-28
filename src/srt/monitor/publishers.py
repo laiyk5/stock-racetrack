@@ -34,3 +34,6 @@ class LoggerSuggestionPublisher(SuggestionPublisher):
         # flush the logger handlers if possible
         for handler in self._logger.handlers:
             handler.flush()
+
+
+__all__ = ["FileSuggestionPublisher", "LoggerSuggestionPublisher"]

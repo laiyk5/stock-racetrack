@@ -5,8 +5,16 @@ from typing import Iterable
 from openai import OpenAI
 
 from srt import check
-from srt.monitor import Asset, Currency, Portfolio, PortfolioProvider, Security
-from srt.monitor.monitors import ChatBot, LLMMonitor
+from srt.monitor import (
+    Asset,
+    Currency,
+    Portfolio,
+    PortfolioProvider,
+    RealTimeClock,
+    Security,
+)
+from srt.monitor.consultants import ChatBot, LLMMConsultant, PureTextEvent
+from srt.monitor.monitors import SimpleMonitor
 from srt.monitor.publishers import FileSuggestionPublisher, LoggerSuggestionPublisher
 
 
@@ -101,7 +109,10 @@ if __name__ == "__main__":
 
     assert API_KEY is not None, "Please set DASHSCOPE_API_KEY in your environment."
 
-    logger.info("Using API key: %s", API_KEY)
+    # hide api key except last 4 chars
+    hidden_key = "*" * (len(API_KEY) - 4) + API_KEY[-4:]
+
+    logger.info("Using API key: %s", hidden_key)
 
     ai_client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
@@ -111,18 +122,27 @@ if __name__ == "__main__":
 
     logger.info("DeepSeek model is available. Starting LLM Monitor...")
 
+    tzinfo = ZoneInfo("Asia/Shanghai")
+
+    clock = RealTimeClock(tzinfo=tzinfo)
+
+    consultant = LLMMConsultant(
+        clock=clock,
+        pure_text_event_sources=[],
+        chatbot=DashscopeChatBot(ai_client, model=MODEL),
+        parsed_err_tolerance=0.8,
+    )
+
     with open("srt_demo_suggestions.log", "a") as f:
         f.write(f"\n\n--- New Run at {datetime.now().isoformat()} ---\n")
-        monitor = LLMMonitor(
+        monitor = SimpleMonitor(
+            consultant=consultant,
             portfolio_provider=DemoPortfolioProvider(),
-            pure_text_event_sources=[],
             suggestion_publishers=[
                 LoggerSuggestionPublisher(),
                 FileSuggestionPublisher(f),
             ],  # Replace with an actual SuggestionPublisher
-            chatbot=DashscopeChatBot(ai_client, model=MODEL),
         )
-        now = datetime.now(tz=ZoneInfo("Asia/Shanghai"))
-
+        now = clock.now()
         # only run once.
         monitor.loop(since=now - timedelta(days=1), until=None, interval=60 * 5)
