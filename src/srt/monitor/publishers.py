@@ -30,7 +30,7 @@ class LoggerSuggestionPublisher(SuggestionPublisher):
         self._logger = logger
 
     def publish(self, suggestion: Suggestion) -> None:
-        self._logger.info("Published suggestion: %s", suggestion)
+        self._logger.info(f"Published suggestion: {str(suggestion)}")
         # flush the logger handlers if possible
         for handler in self._logger.handlers:
             handler.flush()
