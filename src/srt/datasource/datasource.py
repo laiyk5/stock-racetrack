@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import psycopg
@@ -11,7 +12,14 @@ from . import config
 from .dbtools import Dataset, Query, get_conn_str
 
 
+def _set_timezone(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=ZoneInfo(config.get("app", "timezone")))
+    return dt.astimezone(ZoneInfo(config.get("app", "timezone")))
+
+
 class Datasource(ABC):
+
     @staticmethod
     @abstractmethod
     def get_stock_price_ohlcv_daily(
@@ -84,6 +92,9 @@ class TushareDatasource(Datasource):
     def get_stock_price_ohlcv_daily(
         symbol: str, start_at: datetime, end_at: datetime
     ) -> pd.DataFrame:
+        start_at = _set_timezone(start_at)
+        end_at = _set_timezone(end_at)
+
         dataset = Dataset(TushareDatasource.provider, "stock", "daily")
         rows = _fetch_data(dataset, symbol, start_at, end_at)
         records = [
@@ -113,6 +124,9 @@ class TushareDatasource(Datasource):
         start_at: datetime,
         end_at: datetime,
     ):
+        start_at = TushareDatasource._set_timezone(start_at)
+        end_at = TushareDatasource._set_timezone(end_at)
+
         dataset = Dataset(TushareDatasource.provider, "stock", "moneyflow")
         rows = _fetch_data(dataset, symbol, start_at, end_at)
         records = [
@@ -142,6 +156,9 @@ class TushareDatasource(Datasource):
     def get_stock_basic_daily(
         symbol: str, start_at: datetime, end_at: datetime
     ) -> pd.DataFrame:
+        start_at = _set_timezone(start_at)
+        end_at = _set_timezone(end_at)
+
         dataset = Dataset(TushareDatasource.provider, "stock", "daily_basic")
         rows = _fetch_data(dataset, symbol, start_at, end_at)
         records = [

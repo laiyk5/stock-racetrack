@@ -20,7 +20,10 @@ dependencies = [
     "matplotlib>=3.10.6",
     "pre-commit>=4.3.0",
     "psycopg[binary]>=3.2.10",
+    "pydantic>=2.12.5",
+    "pytest>=9.0.1",
     "rich>=14.1.0",
+    "sqlalchemy>=2.0.44",
     "ta-lib>=0.6.7",
     "tenacity>=9.1.2",
     "tulipy>=0.4.0",
@@ -48,3 +51,13 @@ Issues = "https://github.com/laiyk5/stock-racetrack/issues"
 [build-system]
 requires = ["uv_build >= 0.8.17, <0.9.0"]
 build-backend = "uv_build"
+
+
+[tool.pytest]
+minversion = "9.0"
+addopts = ["-ra", "-q"]
+testpaths = [
+    "tests",
+    "integration",
+]
+pythonpath = [".", "src"]

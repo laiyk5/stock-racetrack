@@ -3,6 +3,8 @@ import logging
 import os
 from pathlib import Path
 
+from rich.logging import RichHandler
+
 logger = logging.getLogger(__name__)
 
 # define default configurations
@@ -34,3 +36,4 @@ if config_file.exists():
     logger.info(f"Loaded configuration from {config_file}")
 
 logger.setLevel(config.get("app", "log_level", fallback="INFO"))
+logger.addHandler(RichHandler())
