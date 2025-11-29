@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from json import load
+from typing import TypeVar
 
 import pytest
 from dotenv import load_dotenv
@@ -27,7 +28,16 @@ class TestTushareStockPriceSource:
     def tushare_stock_price_source_cls(self, request):
         return request.param
 
-    def test_get_price_data(self, tushare_stock_price_source_cls):
+    TushareStockPriceSourceType = TypeVar(
+        "TushareStockPriceSourceType",
+        TushareStockDailyPriceSource,
+        TushareStockWeeklyPriceSource,
+        TushareStockMonthlyPriceSource,
+    )
+
+    def test_get_price_data(
+        self, tushare_stock_price_source_cls: type[TushareStockPriceSourceType]
+    ):
         api_token = os.getenv("TUSHARE_API_TOKEN")
         if api_token is None:
             raise KeyError("TUSHARE_API_TOKEN not set")
@@ -36,15 +46,18 @@ class TestTushareStockPriceSource:
 
         stock = Stock(market="CN.SZSE", symbol="000001")
 
+        start_time = datetime(2025, 11, 27)
+        end_time = datetime(2025, 11, 28)
+
         prices = list(
             price_source.get_price_data(
                 stock=stock,
-                start_time=datetime(2023, 1, 1),
-                end_time=datetime(2023, 1, 31),
+                start_time=start_time,
+                end_time=end_time,
             )
         )
 
         assert len(prices) > 0
         for price in prices:
             assert price.stock == stock
-            assert datetime(2023, 1, 1) <= price.start_time <= datetime(2023, 1, 31)
+            assert start_time <= price.start_time <= end_time

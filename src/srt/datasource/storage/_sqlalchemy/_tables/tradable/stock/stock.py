@@ -11,6 +11,7 @@ from sqlalchemy.orm import (
 
 from srt.datasource.storage._sqlalchemy._tables.tradable.tradable import TradableTable
 from srt.datasource.types.tradable import Tradable
+from srt.datasource.types.tradable.stock import Stock
 
 from . import Base
 
@@ -23,3 +24,11 @@ class StockTable(TradableTable, MappedAsDataclass):
     __mapper_args__ = {
         "polymorphic_identity": "stock",
     }
+
+    def to_stock(self) -> Stock:
+        return Stock(
+            id=self.id,
+            market=self.market,
+            symbol=self.symbol,
+            alias=self.alias,
+        )

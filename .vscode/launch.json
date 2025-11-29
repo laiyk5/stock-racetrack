@@ -5,6 +5,34 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Module CmdVar",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "module": "${command:extension.commandvariable.file.relativeDirDots}.${fileBasenameNoExtension}",
+        },
+        {
+            "name": "Debug Pytest",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "internalConsole",
+            "justMyCode": false, // Set to true to skip stepping into library code
+            // "env": {
+            //     "MY_ENV_VAR": "my_value" // Example environment variable
+            // },
+            // "args": [
+            //     "-k", "my_specific_test_name" // Example pytest argument
+            // ]
+        },
+        {
+            "name": "Debug Tests",
+            "type": "debugpy",
+            "request": "test",
+            "console": "internalConsole",
+            "justMyCode": false
+        },
+        {
             "name": "Test Download",
             "type": "debugpy",
             "request": "launch",
