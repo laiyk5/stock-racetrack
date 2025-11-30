@@ -13,7 +13,7 @@ from srt.datasource.downloader.downloader import (
     StockDownloader,
 )
 from srt.datasource.downloader.tushare import (
-    TushareStockDailykPriceDownloader,
+    TushareStockDailyPriceDownloader,
     TushareStockDownloader,
 )
 from srt.datasource.tables import Base, TradablePriceTable, TradableTable
@@ -87,7 +87,9 @@ def test_update_inserts_tradables(monkeypatch, session_factory):
     fake_module = types.SimpleNamespace(pro_api=lambda token: FakeProAPI(token))
     monkeypatch.setitem(sys.modules, "tushare", fake_module)
 
-    downloader = TushareStockDownloader("fake-token", session_factory)
+    downloader = TushareStockDownloader(
+        api_token="fake-token", session_factory=session_factory
+    )
     downloader.update()
 
     session = session_factory()
@@ -143,7 +145,7 @@ def test_download_inserts_price_data(monkeypatch, session_factory, tradable_id):
         fake_get_missing_coverages,
     )
 
-    downloader = TushareStockDailykPriceDownloader(
+    downloader = TushareStockDailyPriceDownloader(
         session_factory=session_factory,
         api_token="fake-token",
     )

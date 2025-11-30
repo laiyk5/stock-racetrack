@@ -12,6 +12,14 @@
             "module": "${command:extension.commandvariable.file.relativeDirDots}.${fileBasenameNoExtension}",
         },
         {
+            "name": "Run SRT CLI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "srt.cli",
+            "console": "integratedTerminal",
+            "args": "${command:pickArgs}"
+        },
+        {
             "name": "Debug Pytest",
             "type": "debugpy",
             "request": "launch",

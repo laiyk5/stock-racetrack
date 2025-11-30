@@ -118,3 +118,12 @@ class TradablePriceTable(MappedAsDataclass, Base):
             close=self.close,
             volume=self.volume,
         )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "data_info_id",
+            "tradable_id",
+            "start_time",
+            name="_uc_datainfo_tradable_starttime",
+        ),
+    )

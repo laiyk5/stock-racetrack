@@ -42,7 +42,7 @@ dev = [
 ]
 
 [project.scripts]
-srt = "srt.cli:cli"
+srt-cli = "srt.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/laiyk5/stock-racetrack"

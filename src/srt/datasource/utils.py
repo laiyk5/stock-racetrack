@@ -1,6 +1,9 @@
 import logging
 from typing import Optional
 
+import sqlalchemy
+import sqlalchemy.exc
+
 from .tables import Base
 
 logger = logging.getLogger(__name__)
@@ -13,14 +16,22 @@ class DB:
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
-        self._engine = create_engine(database_url)
+        try:
+            self._engine = create_engine(database_url)
+        except sqlalchemy.exc.ArgumentError as e:
+            logger.error(
+                f"Failed to create engine with database URL '{database_url}': {e}"
+            )
+            raise
+
         self.Session = sessionmaker(bind=self._engine)
         Base.metadata.create_all(self._engine)
 
     def get_session_factory(self):
         return self.Session
 
-    def get_instance(self, database_url: str) -> "DB":
+    @classmethod
+    def get_instance(cls, database_url: str) -> "DB":
         if DB._instance is None:
             DB._instance = DB(database_url)
         return DB._instance

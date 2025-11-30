@@ -1,10 +1,10 @@
 import logging
 import os
-from abc import abstractmethod
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from typing import Callable, Iterable, Optional
 
+from cachetools import cached
 from sqlalchemy.orm import Session
 
 from srt.datasource.data import Coverage, Exchange, Tradable
@@ -55,6 +55,20 @@ def tradable_to_ts_code(tradable: Tradable) -> str:
             f"Unknown exchange for Tushare: {tradable.exchange.to_string()}"
         )
     return f"{tradable.symbol}.{exchange_suffix}"
+
+
+@cached(cache=defaultdict())
+def ts_code_to_tradable_id(session: Session, ts_code: str) -> int | None:
+    """Convert Tushare ts_code to Tradable object."""
+    exchange, symbol = parse_ts_code(ts_code)
+
+    tradable = (
+        session.query(TradableTable)
+        .filter_by(exchange=exchange.to_string(), symbol=symbol)
+        .one_or_none()
+    )
+
+    return tradable.id if tradable is not None else None
 
 
 def get_missing_coverages(
@@ -149,7 +163,7 @@ def get_missing_coverages(
 
 
 class TushareStockDownloader(StockDownloader):
-    def __init__(self, api_token: str, session_factory: Callable[[], Session]):
+    def __init__(self, session_factory: Callable[[], Session], api_token: str):
         from tushare import pro_api
 
         self._api = pro_api(api_token)
@@ -190,24 +204,31 @@ class TushareStockDownloader(StockDownloader):
                     )
                     continue
 
-                session.merge(
-                    TradableTable(
-                        exchange=exchange.to_string(),
-                        symbol=symbol,
-                        alias=row["name"],
-                        type="stock",
-                        data_info_id=StockDownloader.get_data_info_id(session),
+                if existing is not None:
+                    # Update existing record
+                    existing.alias = row["name"]
+                    existing.data_info_id = StockDownloader.get_data_info_id(session)
+                else:
+                    # Insert new record
+                    session.add(
+                        TradableTable(
+                            exchange=exchange.to_string(),
+                            symbol=symbol,
+                            alias=row["name"],
+                            type="stock",
+                            data_info_id=StockDownloader.get_data_info_id(session),
+                        )
                     )
-                )
                 session.commit()
 
             except Exception as e:
                 logger.error(f"Failed to process stock {row['ts_code']}: {e}")
                 session.rollback()
+
         session.close()
 
 
-class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
+class TushareStockDailyPriceDownloader(StockDailyPriceDownloader):
     def __init__(
         self,
         session_factory: Callable[[], Session],
@@ -295,11 +316,14 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
                 merged.append(current_coverage)
             merged_missings[tradable_id] = merged
 
-        def write_db(df):
+        def write_db(session: Session, df):
             for _, row in df.iterrows():
                 _start_time = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
                 _end_time = _start_time + timedelta(days=1)
-                session.merge(
+
+                tradable_id = ts_code_to_tradable_id(session, ts_code=row["ts_code"])
+
+                session.add(
                     TradablePriceTable(
                         start_time=_start_time,
                         end_time=_end_time,
@@ -308,7 +332,7 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
                         low=row["low"],
                         close=row["close"],
                         volume=row["vol"],
-                        tradable_id=tradable_id,
+                        tradable_id=tradable_id,  # type: ignore
                         data_info_id=StockDailyPriceDownloader.get_data_info_id(
                             session
                         ),
@@ -339,7 +363,7 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
                                 start_date=cov.start_time.strftime("%Y%m%d"),
                                 end_date=cov.end_time.strftime("%Y%m%d"),
                             )
-                            write_db(df)
+                            write_db(session=session, df=df)
                             session.commit()
                             logger.info(
                                 f"Successfully downloaded prices for {tradable.exchange} {tradable.symbol} "
@@ -364,7 +388,15 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
             total_days = (end_time - start_time).days + 1
             day_count = 0
 
-            while current_date <= end_time:
+            while current_date < end_time:
+                # skip weekends
+                if current_date.weekday() >= 5:
+                    current_date += timedelta(days=1)
+                    day_count += 1
+                    logger.debug(
+                        f"Skipping weekend date {current_date.date()} ({day_count}/{total_days})"
+                    )
+                    continue
                 try:
                     df = self._api.daily(
                         trade_date=current_date.strftime("%Y%m%d"),
@@ -376,7 +408,11 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
                             for tradable in tradables
                         ]
                         df = df[df["ts_code"].isin(ts_codes)]
-                    write_db(df)
+
+                    write_db(
+                        session=session,
+                        df=df,
+                    )
                     session.commit()
                     logger.info(
                         f"Successfully downloaded prices on {current_date.date()} ({day_count + 1}/{total_days})"
@@ -424,7 +460,7 @@ class TushareStockDailykPriceDownloader(StockDailyPriceDownloader):
             start_date = last_date + timedelta(days=1)
         else:
             start_date = date.today() - timedelta(
-                days=1
+                days=10
             )  # default to yesterday if no data
 
         self.download(
@@ -474,7 +510,7 @@ if __name__ == "__main__":
     stock_downloader.update()
 
     # test tushare stock daily price downloader
-    stock_price_downloader = TushareStockDailykPriceDownloader(
+    stock_price_downloader = TushareStockDailyPriceDownloader(
         api_token=tushare_token,
         session_factory=session_factory,
     )
