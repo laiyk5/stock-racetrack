@@ -93,6 +93,13 @@
             "type": "debugpy",
             "request": "launch",
             "module": "srt.research.pyramid.main",
+        },
+        {
+            "name": "Python: Module CmdVar",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "module": "${command:extension.commandvariable.file.relativeDirDots}.${fileBasenameNoExtension}",
         }
     ]
 }

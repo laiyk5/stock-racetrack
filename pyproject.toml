@@ -6,7 +6,7 @@ authors = [
 ]
 description = "A stock research tool"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 classifiers = [
     "Private :: Do Not Upload",
     "Programming Language :: Python :: 3",
@@ -17,13 +17,20 @@ dependencies = [
     "backtesting>=0.6.5",
     "cachetools>=6.2.0",
     "click>=8.3.0",
+    "dateparser>=1.2.2",
+    "httpx[socks]>=0.28.1",
+    "jsonschema>=4.25.1",
     "dotenv>=0.9.9",
     "matplotlib>=3.10.6",
+    "openai>=2.8.1",
     "pre-commit>=4.3.0",
     "psycopg[binary]>=3.2.10",
     "pydantic>=2.12.5",
+    "python-dotenv>=1.2.1",
+    "pydantic>=2.12.5",
     "pytest>=9.0.1",
     "rich>=14.1.0",
+    "selenium>=4.38.0",
     "sqlalchemy>=2.0.44",
     "ta-lib>=0.6.7",
     "tenacity>=9.1.2",
