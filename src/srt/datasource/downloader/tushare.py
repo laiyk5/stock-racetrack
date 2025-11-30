@@ -2,7 +2,7 @@ import logging
 import os
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Tuple
 
 from cachetools import cached
 from sqlalchemy.orm import Session
@@ -284,14 +284,20 @@ class TushareStockDailyPriceDownloader(StockDailyPriceDownloader):
             session, tradables, start_time, end_time
         )
 
-        for k, v in missing_coverages.items():
+        for k, v in list(missing_coverages.items()):
             if len(v) == 0:
                 del missing_coverages[k]
+
+        # filter out weekends from missing coverages
+        missing_coverages = {
+            i: [cov for cov in covs if cov.start_time.weekday() <= 5]
+            for i, covs in missing_coverages.items()
+        }
 
         # merge missings tradables while respecting minimum gap and maximum size
 
         merged_missings: dict[int, list[Coverage]] = defaultdict(list)
-        minimum_gap = timedelta(days=1)
+        minimum_gap = timedelta(days=30)
         for tradable_id, coverages in missing_coverages.items():
             coverages.sort(key=lambda c: c.start_time)
             merged = []
@@ -316,71 +322,104 @@ class TushareStockDailyPriceDownloader(StockDailyPriceDownloader):
                 merged.append(current_coverage)
             merged_missings[tradable_id] = merged
 
-        def write_db(session: Session, df):
-            for _, row in df.iterrows():
-                _start_time = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
-                _end_time = _start_time + timedelta(days=1)
-
-                tradable_id = ts_code_to_tradable_id(session, ts_code=row["ts_code"])
-
-                session.add(
-                    TradablePriceTable(
-                        start_time=_start_time,
-                        end_time=_end_time,
-                        open=row["open"],
-                        high=row["high"],
-                        low=row["low"],
-                        close=row["close"],
-                        volume=row["vol"],
-                        tradable_id=tradable_id,  # type: ignore
-                        data_info_id=StockDailyPriceDownloader.get_data_info_id(
-                            session
-                        ),
-                    )
-                )
-
         def download_by_tradable(merged_missings: dict[int, list[Coverage]]):
+            # should update the session date by date to match the 'Updater.update' function semantic.
+            merged_missings = dict(merged_missings)  # make a copy
+            queries: list[tuple[int, datetime, datetime]] = (
+                []
+            )  # list[(tradable_id, start_time, end_time)]
             for tradable_id, missings in merged_missings.items():
-                try:
-                    tradable = (
-                        session.query(TradableTable)
-                        .filter_by(id=tradable_id)
-                        .one_or_none()
-                    )
+                for m in missings:
+                    queries.append((tradable_id, m.start_time, m.end_time))
+            queries.sort(key=lambda x: x[1])  # sorted by start_time
 
-                    if tradable is None:
-                        raise ValueError(
-                            f"Tradable with id {tradable_id} not found in database."
+            records: dict[datetime, list[TradablePriceTable]] = defaultdict(list)
+
+            # Algorithm explaination:
+            # iterate through dates between start_time and end_time
+            #   for each date, fetch data for all tradables that start_time ealier than current date
+            #   since the queries are sorted by start_time, we can just keep a pointer to the current position and move forward as the date increases.
+            #   if we meat a tradable whose start_time is later than current date, we stop fetching and write data of current date to database, and move to next date.
+            #   This way, we minimize the number of API calls and respect rate limits.
+
+            for date_cursor in (
+                start_time + timedelta(days=n)
+                for n in range((end_time - start_time).days + 1)
+            ):
+                batch_queries: list[tuple[int, datetime, datetime]] = []
+                while queries and queries[0][1] <= date_cursor:
+                    batch_queries.append(queries.pop(0))
+
+                for tradable_id, cov_start, cov_end in batch_queries:
+                    try:
+                        tradable = (
+                            session.query(TradableTable)
+                            .filter_by(id=tradable_id)
+                            .one_or_none()
                         )
 
-                    ts_code = tradable_to_ts_code(tradable.to_tradable())
+                        if tradable is None:
+                            raise ValueError(
+                                f"Tradable with id {tradable_id} not found in database."
+                            )
 
-                    total = len(missings)
-                    for pos, cov in enumerate(missings):
-                        try:
-                            df = self._api.daily(
-                                ts_code=ts_code,
-                                start_date=cov.start_time.strftime("%Y%m%d"),
-                                end_date=cov.end_time.strftime("%Y%m%d"),
-                            )
-                            write_db(session=session, df=df)
-                            session.commit()
-                            logger.info(
-                                f"Successfully downloaded prices for {tradable.exchange} {tradable.symbol} "
-                                f"from {cov.start_time} to {cov.end_time} ({pos + 1}/{total})"
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to download prices for {tradable.exchange} {tradable.symbol} "
-                                f"from {cov.start_time} to {cov.end_time} ({pos + 1} / {total}): {e}"
-                            )
-                            session.rollback()
-                            continue
+                        ts_code = tradable_to_ts_code(tradable.to_tradable())
 
-                except Exception as e:
-                    logger.error(f"Failed to process tradable id {tradable_id}: {e}")
-                    session.rollback()
-                    continue
+                        df = self._api.daily(
+                            ts_code=ts_code,
+                            start_date=cov_start.strftime("%Y%m%d"),
+                            end_date=cov_end.strftime("%Y%m%d"),
+                        )
+                        for _, row in df.iterrows():
+                            _start_time = datetime.strptime(
+                                str(row["trade_date"]), "%Y%m%d"
+                            )
+                            _end_time = _start_time + timedelta(days=1)
+
+                            # avoid duplication
+
+                            existing = session.query(TradablePriceTable).filter_by(
+                                data_info_id=StockDailyPriceDownloader.get_data_info_id(
+                                    session
+                                ),
+                                tradable_id=tradable_id,
+                                end_time=_end_time,
+                            )
+                            if existing.count() > 0:
+                                continue
+
+                            records[_start_time].append(
+                                TradablePriceTable(
+                                    start_time=_start_time,
+                                    end_time=_end_time,
+                                    open=row["open"],
+                                    high=row["high"],
+                                    low=row["low"],
+                                    close=row["close"],
+                                    volume=row["vol"],
+                                    tradable_id=tradable_id,  # type: ignore
+                                    data_info_id=StockDailyPriceDownloader.get_data_info_id(
+                                        session
+                                    ),
+                                )
+                            )
+
+                        logger.info(
+                            f"Successfully fetched prices for {tradable.exchange} {tradable.symbol} "
+                            f"from {cov_start} to {cov_end}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to fetch prices for {tradable_id}"
+                            f"from {cov_start} to {cov_end}: {e}"
+                        )
+                        session.rollback()
+                        continue
+
+                # write records of current date to database and flush
+                session.add_all(records[date_cursor])
+                session.commit()
+                del records[date_cursor]  # free memory
 
         def download_by_trade_date(tradables: Iterable[TradableTable]):
 
@@ -409,10 +448,41 @@ class TushareStockDailyPriceDownloader(StockDailyPriceDownloader):
                         ]
                         df = df[df["ts_code"].isin(ts_codes)]
 
-                    write_db(
-                        session=session,
-                        df=df,
-                    )
+                    for _, row in df.iterrows():
+                        _start_time = datetime.strptime(
+                            str(row["trade_date"]), "%Y%m%d"
+                        )
+                        _end_time = _start_time + timedelta(days=1)
+
+                        tradable_id = ts_code_to_tradable_id(
+                            session, ts_code=row["ts_code"]
+                        )
+
+                        existing = session.query(TradablePriceTable).filter_by(
+                            tradable_id=tradable_id,
+                            end_time=_end_time,
+                            data_info_id=StockDailyPriceDownloader.get_data_info_id(
+                                session
+                            ),
+                        )
+                        if existing.count() > 0:
+                            continue
+
+                        session.add(
+                            TradablePriceTable(
+                                start_time=_start_time,
+                                end_time=_end_time,
+                                open=row["open"],
+                                high=row["high"],
+                                low=row["low"],
+                                close=row["close"],
+                                volume=row["vol"],
+                                tradable_id=tradable_id,  # type: ignore
+                                data_info_id=StockDailyPriceDownloader.get_data_info_id(
+                                    session
+                                ),
+                            )
+                        )
                     session.commit()
                     logger.info(
                         f"Successfully downloaded prices on {current_date.date()} ({day_count + 1}/{total_days})"
@@ -490,11 +560,11 @@ if __name__ == "__main__":
     load_dotenv()
 
     # register data info for stock
-    session = session_factory()
-    StockDownloader.register_data_info(session)
-    StockDailyPriceDownloader.register_data_info(session)
-    session.commit()
-    session.close()
+    # session = session_factory()
+    # StockDownloader.register_data_info(session)
+    # StockDailyPriceDownloader.register_data_info(session)
+    # session.commit()
+    # session.close()
 
     tushare_token = os.getenv("TUSHARE_API_TOKEN", None)
 
@@ -516,7 +586,10 @@ if __name__ == "__main__":
     )
 
     stock_price_downloader.download(
-        start_time=datetime(2025, 11, 27),
+        start_time=datetime(2025, 11, 10),
         end_time=datetime(2025, 11, 28),
-        tradable_set=None,
+        tradable_set=[
+            Tradable(exchange=Exchange(country="CN", name="SZSE"), symbol="000001"),
+            Tradable(exchange=Exchange(country="CN", name="SSE"), symbol="699999"),
+        ],
     )
