@@ -1,46 +1,26 @@
 import logging
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from typing import Optional
 
-import tenacity
-from tushare import pro_api, set_token
-
-from srt.datasource import config
+from .tables import Base
 
 logger = logging.getLogger(__name__)
 
-set_token(config.get("tushare", "token"))
-api = pro_api()
 
+class DB:
+    _instance: Optional["DB"] = None
 
-@tenacity.retry(
-    wait=tenacity.wait_exponential(multiplier=1, min=4, max=60),
-    stop=tenacity.stop_after_attempt(5),
-    before=tenacity.before_log(logger, logging.DEBUG),
-)
-def get_symbol_list(symbol_type: str) -> list:
-    """
-    Fetch the stock list from Tushare and return a list of stock symbols.
-    """
+    def __init__(self, database_url: str):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
 
-    available_symbol_types = {
-        "index",
-        "fund",
-        "stock",
-    }
+        self._engine = create_engine(database_url)
+        self.Session = sessionmaker(bind=self._engine)
+        Base.metadata.create_all(self._engine)
 
-    if symbol_type not in available_symbol_types:
-        raise ValueError(
-            f"Invalid symbol_type. Available options are: {', '.join(available_symbol_types)}"
-        )
+    def get_session_factory(self):
+        return self.Session
 
-    logger.debug("Fetching stock list from Tushare...")
-    df = api.query(
-        symbol_type + "_basic",
-        exchange="",
-        list_status="L",
-        fields="ts_code,symbol,name,area,industry,list_date",
-    )
-    logger.debug("Fetched %d stocks from Tushare.", len(df))
-    logger.debug("Sample stock list data:\n%s", df.head())
-    return df["ts_code"].tolist()
+    def get_instance(self, database_url: str) -> "DB":
+        if DB._instance is None:
+            DB._instance = DB(database_url)
+        return DB._instance
