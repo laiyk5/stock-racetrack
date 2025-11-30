@@ -8,7 +8,7 @@ from srt.datasource.data import Tradable
 from srt.datasource.tables import DataInfoTable
 
 
-class Updator(ABC):
+class Updater(ABC):
 
     DATA_NAME: str | None = None
 
@@ -53,13 +53,13 @@ class Updator(ABC):
         return data_info.id  # type: ignore # ID would never be None beacause the data_info is retrieved from database.
 
 
-class StockDownloader(Updator):
+class StockDownloader(Updater):
     """Downloader for fetching time range tradable data from external sources."""
 
     DATA_NAME = "stock"
 
 
-class StockDailyPriceDownloader(Updator):
+class StockDailyPriceDownloader(Updater):
     """Downloader for fetching time range stock price data from external sources."""
 
     DATA_NAME = "stock_daily_price"
