@@ -31,4 +31,4 @@ jobs:
           restore-keys: |
             mkdocs-material-
       - name: Build and Deploy MkDocs site
-        run: mkdocs gh-deploy --force
+        run: uv run mkdocs gh-deploy --force
