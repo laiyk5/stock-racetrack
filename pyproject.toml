@@ -34,6 +34,7 @@ dev = [
     "black>=25.9.0",
     "isort>=6.0.1",
     "mkdocs-material[imaging]>=9.6.16",
+    "mkdocstrings[python]>=1.0.0",
     "snakeviz>=2.2.2",
 ]
 
