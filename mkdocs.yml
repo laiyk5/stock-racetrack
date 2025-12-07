@@ -3,10 +3,14 @@ site_url: https://laiyk5.github.io/stock-racetrack
 repo_name: laiyk5/stock-racetrack
 repo_url: https://github.com/laiyk5/stock-racetrack
 nav:
-  - Home: index.md
+  - Home:
+    - index.md
+    - blog/index.md
+    - api/index.md
+  - API:
+    - api/index.md
   - Blog:
       - blog/index.md
-  - Documents: documents/index.md
 theme:
   name: material
   palette:
@@ -37,10 +41,7 @@ theme:
     - navigation.sections
     - navigation.expand
 plugins:
-  - blog:
-      blog_toc: true
-      archive_date_format: MMMM yyyy
-      pagination_per_page: 5
+  - blog
   - meta
   - tags
   - search
