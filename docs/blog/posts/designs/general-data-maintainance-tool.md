@@ -4,13 +4,12 @@ date:
     updated: 2025-12-07
 draft: true
 ---
-# System Design
+
+# Data Maintainance and Management
 
 <!-- more -->
 
-## Data Maintainance and Management
-
-### Non Functional Requirements
+## Non Functional Requirements
 
 The data maintaince system should be highly extensible:
 
@@ -18,7 +17,7 @@ The data maintaince system should be highly extensible:
 2. Extensible Maintainance Routine: new maintainance routine should be easily integrated into the existing one.
 3. Multi Source Updating: each data table should be able to be updated by various sources.
 
-### User Requirements
+## User Requirements
 
 User wants a maintainance tool to easily setup or execute the maintainance routines.
 
@@ -28,7 +27,7 @@ Users wants to be able to:
 - **Update** the selected data tables manually.
 - **Inspect** the integrety and timeliness of the data.
 
-### API
+## API
 
 | HTTP Method | Endpoint                     | Parameter Schema                                                        | Return Schema                                  | Description                             |
 | ----------- | ---------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------- |
@@ -37,7 +36,7 @@ Users wants to be able to:
 | PUT         | /api/v1/market-data/settings | {db_url: "",  table_name: "", method: "", frequency: "", tolerance: ""} | {result: "", err: [ {field: "", err_msg: ""}]} | send settings                           |
 | GET         | /api/v1/market-data/settings | {}                                                                      | {all fields presented in the PUT variant}      | get settings                            |
 
-### Approaches
+## Approaches
 
 - Maintainance: Define abstract maintainer components for each data table.
 - Other components of the system directly use the ORM to fetch data.

@@ -1583,6 +1583,7 @@ dev = [
     { name = "isort" },
     { name = "mkdocs-material", extra = ["imaging"] },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pymdown-extensions" },
     { name = "snakeviz" },
 ]
 
@@ -1608,6 +1609,7 @@ dev = [
     { name = "isort", specifier = ">=6.0.1" },
     { name = "mkdocs-material", extras = ["imaging"], specifier = ">=9.6.16" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.0" },
+    { name = "pymdown-extensions", specifier = ">=10.16.1" },
     { name = "snakeviz", specifier = ">=2.2.2" },
 ]
 

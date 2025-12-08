@@ -10,9 +10,10 @@ nav:
   - API:
     - api/index.md
   - Blog:
-      - blog/index.md
+    - blog/index.md
 theme:
   name: material
+  logo: assets/logo.png
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -29,7 +30,7 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
       primary: black
-      accent: pink
+      accent: deep orange
   features:
     - navigation.tabs
     - navigation.tabs.sticky
@@ -49,3 +50,16 @@ plugins:
   - mkdocstrings
 extra_css:
   - stylesheets/extra.css
+
+markdown_extensions:
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - admonition
+
+copyright: Copyright &copy; 2025 LAI Yikai. All rights reserved.
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/laiyk5/stock-racetrack
+  generator: false
