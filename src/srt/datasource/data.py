@@ -23,8 +23,8 @@ class Coverage(TimeRangeData):
 
 
 class Exchange(Entity):
-    country: str
-    name: str
+    country: str  # ISO 3166-1 alpha-2 country code. For example: "CN" for China, "US" for United States.
+    name: str  # Exchange name, typically in uppercase. For example: "SSE" for Shanghai Stock Exchange, "NYSE" for New York Stock Exchange.
 
     @field_validator("country")
     def validate_country(cls, v: str) -> str:

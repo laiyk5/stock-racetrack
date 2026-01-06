@@ -1,5 +1,6 @@
 import configparser
 import logging
+import logging.config
 import os
 from functools import cache
 from pathlib import Path
@@ -8,9 +9,6 @@ from pathlib import Path
 # The config root should be parsed as followed:
 # ./.config/srt/
 # ~/.config/srt/
-
-
-logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
@@ -48,3 +46,37 @@ def get_config() -> configparser.ConfigParser:
         logger.info("No configuration file found; using default settings.")
 
     return config
+
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
+        "detailed": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "rich.logging.RichHandler",
+            "level": "INFO",
+            "formatter": "simple",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "detailed",
+            "filename": "srt.log",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+        },
+    },
+    "loggers": {
+        "srt": {"level": "DEBUG", "handlers": ["console", "file"], "propagate": False}
+    },
+}
+
+
+def config_logger():
+    logging.config.dictConfig(LOGGING_CONFIG)
